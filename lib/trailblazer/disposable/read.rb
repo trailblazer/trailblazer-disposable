@@ -3,16 +3,16 @@ module Trailblazer
     module Read
       module_function
 
-      def from_h(hash, definitions:, populator:, **)
+      def from_h(source, definitions:, populator:, **)
         ary = definitions.collect do |dfn|
           # next if dfn[:readable] == false # FIXME: is that really what we want?
 
-          value = hash[ dfn[:name].to_sym ]
+          value = read(source, dfn)
           # value = hash[ dfn[:private_name] ]
           # value ||= dfn[:default] # FIXME: what if we want nil? Also, optional? Do we need it>
 
-          value = Disposable::Processor.(dfn, value) { |_value, i|
-            from_h(_value, definitions: dfn[:nested].definitions, populator: ->(hash) { dfn[:nested].to_value.new(hash) })
+          value = Disposable::Processor::Property.(dfn, value) { |_value, i|
+            for_nested(_value, dfn)
           } if dfn[:nested]
 
           # DISCUSS
@@ -28,6 +28,19 @@ module Trailblazer
 
         # TODO: allow injecting an optional class, e.g. Dry-struct or Struct
         populator.(Hash[ary])
+      end
+
+      # @private
+      def read(source, dfn)
+        source[ dfn[:name].to_sym ]
+      end
+
+      def for_nested(source, definition)
+        from_h(
+          source,
+          definitions: definition[:nested].definitions,
+          populator:   ->(hash) { definition[:nested].to_value.new(hash) } # TODO: make this unnecessary.
+        )
       end
     end
   end

@@ -6,23 +6,29 @@ module Trailblazer
   # For a collection, this is run per item and yields the item.
   #:private:
   module Disposable::Processor
-    module_function
+    module Property
+      module_function
 
-    def call(definition, value, &block)
-      if definition[:collection]
-        apply_for_collection(value, &block)
-      else
-        apply_for_property(value, &block)
+      def call(definition, value, &block)
+        if definition[:collection]
+          apply_for_collection(value, &block)
+        else
+          apply_for_property(value, &block)
+        end
+      end
+
+      def apply_for_collection(value)
+        (value || []).each_with_index.collect { |nested_twin, i| yield(nested_twin, i) }
+      end
+
+      def apply_for_property(value)
+        twin = value or return nil
+        yield(twin)
       end
     end
 
-    def apply_for_collection(value)
-      (value || []).each_with_index.collect { |nested_twin, i| yield(nested_twin, i) }
-    end
+    def call
 
-    def apply_for_property(value)
-      twin = value or return nil
-      yield(twin)
     end
   end
 

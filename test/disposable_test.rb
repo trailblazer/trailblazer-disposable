@@ -12,7 +12,7 @@ class DisposableTest < Minitest::Spec
 
 
     class Expense
-      # Define what you _want_ from the source object.
+      # Define what you _want_ from the source object, and what the source looks like. (also, data types)
       class Source < Disposable::Twin
 
         property :id, type: Types::Strict::Int
@@ -24,6 +24,26 @@ class DisposableTest < Minitest::Spec
           property :country, type: Types::Strict::String
         end
         property :amount, type: Types::Strict::Int
+      end
+
+      class Domain < Disposable::Twin #Decorator
+        # source Source
+
+        property :id, from: "./id"
+
+        # unnest :taxes, from: :data
+        collection :taxes, from: "./data/taxes" do
+          property :amount, from: "./amount"
+          property :percent, from: "./percent"
+        end
+
+        # alias  :total, from: :amount
+        property :total, from: "./amount"
+
+        # property :data do
+        #   # nest :id, from: "../"
+        #   property :id, from: "../id"
+        # end
       end
     end
 
@@ -48,6 +68,14 @@ class DisposableTest < Minitest::Spec
     twin = Disposable::Read.from_h(source, definitions: Expense::Source.definitions, populator: ->(hash) { Expense::Source.to_value.new(hash) })
 
     twin.to_h.must_equal({:id=>1, :data=>{:taxes=>[{:amount=>1, :percent=>2}], :country=>"DEU"}, :amount=>99})
+
+    # decorate ("domain object")
+    decorated = Disposable::Decorate.from_h(twin, definitions: Expense::Domain.definitions, populator: ->(hash) { OpenStruct.new(hash).freeze })
+    decorated.inspect.must_equal %{#<OpenStruct id=1, taxes=[#<OpenStruct amount=1, percent=2>], total=99>}
+    # decorated.to_h.must_equal()
+
+    decorated.id.must_equal 1
+    decorated.taxes[0].percent.must_equal 2
 
     # to_mutable
   end
