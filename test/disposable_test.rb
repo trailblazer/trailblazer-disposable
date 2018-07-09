@@ -45,6 +45,20 @@ class DisposableTest < Minitest::Spec
         #   property :id, from: "../id"
         # end
       end
+
+      # TODO: coercion here?
+      class Twin < Disposable::Twin
+        # source Domain
+
+        property :id
+
+        collection :taxes do
+          property :amount
+          property :percent
+        end
+
+        property :total
+      end
     end
 
     # pp Expense::Source.definitions["data"][:nested].definitions["taxes"][:nested].instance_variable_get(:@value).new(amount: 1, percent: 2)
@@ -65,12 +79,12 @@ class DisposableTest < Minitest::Spec
     )
 
     # we want a immutable twin that matches the Source (but only specified properties, plus defaults, plus coercions?)
-    twin = Disposable::Read.from_h(source, definitions: Expense::Source.definitions, populator: ->(hash) { Expense::Source.to_value.new(hash) })
+    twin = Disposable::Read.from_h(source, definitions: Expense::Source.definitions, populator: ->(hash, definition:) { definition[:nested].to_value.new(hash) }, definition: {nested: Expense::Source} )
 
     twin.to_h.must_equal({:id=>1, :data=>{:taxes=>[{:amount=>1, :percent=>2}], :country=>"DEU"}, :amount=>99})
 
     # decorate ("domain object")
-    decorated = Disposable::Decorate.from_h(twin, definitions: Expense::Domain.definitions, populator: ->(hash) { OpenStruct.new(hash).freeze })
+    decorated = Disposable::Decorate.from_h(twin, definitions: Expense::Domain.definitions, populator: ->(hash, definition:) { OpenStruct.new(hash).freeze }, definition: nil )
     decorated.inspect.must_equal %{#<OpenStruct id=1, taxes=[#<OpenStruct amount=1, percent=2>], total=99>}
     # decorated.to_h.must_equal()
 
@@ -78,5 +92,6 @@ class DisposableTest < Minitest::Spec
     decorated.taxes[0].percent.must_equal 2
 
     # to_mutable
+    form = Disposable::Twin.from_h(decorated, definitions: Expense::Twin.definitions, populator: ->(hash, definition:) { definition[:nested].to_twin.new(hash) }, definition: {nested: Expense::Twin}  )
   end
 end

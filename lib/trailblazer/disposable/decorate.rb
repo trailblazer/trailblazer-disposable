@@ -31,15 +31,6 @@ module Trailblazer
           raise "not yet implemented!"
         end
       end
-
-      def for_nested(source, definition)
-        from_h(
-          source,
-          definitions: definition[:nested].definitions,
-          populator:   ->(hash) { OpenStruct.new(hash).freeze } # TODO: make this unnecessary.
-        )
-
-      end
     end
   end
 end
