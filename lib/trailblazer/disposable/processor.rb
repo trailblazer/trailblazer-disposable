@@ -18,17 +18,13 @@ module Trailblazer
       end
 
       def apply_for_collection(value)
-        (value || []).each_with_index.collect { |nested_twin, i| yield(nested_twin, i) }
+        (value || []).each_with_index.collect { |nested_twin, i| yield(nested_twin, i) } # returns Array instance.
       end
 
       def apply_for_property(value)
         twin = value or return nil
         yield(twin)
       end
-    end
-
-    def call
-
     end
   end
 

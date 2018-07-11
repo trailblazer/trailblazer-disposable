@@ -3,16 +3,16 @@ require "test_helper"
 class TwinTest < Minitest::Spec
   module Expense
     class Twin < Disposable::Twin
-      property :id
+      property :id, twin: ->(value) { value }
 
       collection :taxes do
-        property :amount
-        property :percent
+        property :amount, twin: ->(value) { value }
+        property :percent, twin: ->(value) { value }
       end
 
       property :total do
-        property :amount
-        property :currency
+        property :amount, twin: ->(value) { value }
+        property :currency, twin: ->(value) { value }
       end
     end
   end
@@ -20,9 +20,28 @@ class TwinTest < Minitest::Spec
   it do
     model = Struct.new(:id, :taxes, :total).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"))
 
+    twin = Disposable::Schema.for_property(
+      {nested: Expense::Twin, twin: Expense::Twin, name: "/root"},
+      {"/root".to_sym => model},
+
+      populator:   ->(hash, definition:) { definition[:twin].(hash) },
+
+      # definitions: Expense::Twin.definitions,
+      # # per "item"
+      # # per collection
+      # # collection_populator: ->(ary, definition) { snippet },
+    )
+  end
+
+  it do
+    model = Struct.new(:id, :taxes, :total).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"))
+
     twin = Disposable::Twin::Schema.from_h(model,
       definitions: Expense::Twin.definitions,
+      # per "item"
       populator:   ->(hash, definition:) { definition[:nested].new(hash) },
+      # per collection
+      # collection_populator: ->(ary, definition) { snippet },
       definition:  {nested: Expense::Twin}
     )
 

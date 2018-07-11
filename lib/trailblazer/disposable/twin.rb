@@ -9,12 +9,17 @@ module Trailblazer
       extend Declarative::Schema
 
       class << self
+        def call(fields)
+          new(fields)
+        end
+
         def default_nested_class
           Twin
         end
 
         def property(name, options={}, &block)
           definition = super(name, options, &block)
+          definition.merge! :twin => definition[:nested] if definition[:nested] # FIXME: mutability sucks, and this should be done via Declarative configuration.
 
           create_accessors(name, definition)# unless is_inherited
 
