@@ -16,36 +16,40 @@ module Trailblazer
       def for_property(definition, source, populator:)
         value = read(source, definition)
 
-        # ary = Processor.(definition, value) if definition[:nested] # go through all definitions! if it's a collection, processor over the collection
-        #   for_definitions(definition[:nested], value) ..
+        # go through all definitions! if it's a collection, processor over the collection
 
-        _ary = value
-
-        if definition[:nested]
-          if definition[:collection]
-
-            _ary = value.each_with_index.collect do |item, i|
-              pp item
-              for_property( definition[:nested], item, populator: populator) # FIXME: we don't need to #read anymore. Also, we need to pass in the nested definition, not the collection.
-            end
-
-            raise _ary.inspect
-
-          else
-            _ary = for_definitions(definition[:twin], value, populator: populator) # only for !:collection
-            _ary = Hash[_ary]
-          end
-        end
+        value = process(definition, value, populator: populator)
 
 
 
-        # if :collection, make a Twin::Collection here!
-        _ary = populator.(_ary, definition: definition)
 
-        ary = [definition[:name].to_sym, _ary]
+        ary = [definition[:name].to_sym, value]
         # ary = [definition[:name].to_sym, Hash[_ary]]
         pp ary
         ary
+      end
+
+      def process(definition, value, populator:)
+        if definition[:nested]
+          if definition[:collection]
+
+            value = value.each_with_index.collect do |item, i|
+              process( definition.merge!(collection: false), item, populator: populator) # FIXME: we don't need to #read anymore. Also, we need to pass in the nested definition, not the collection.
+            end
+
+            # raise value.inspect
+
+          else # nested property
+            value = for_definitions(definition[:twin], value, populator: populator)
+            puts "!!!!@@@@@ #{definition[:name].inspect} -- #{value.inspect}"
+            value = Hash[value]
+          end
+        end
+
+        # if :collection, make a Twin::Collection here!
+        value = populator.(value, definition: definition)
+        puts ">>> #{value.inspect} +++++++++ #{populator} for "
+        value
       end
 
       def for_definitions(schema, source, **options)
@@ -56,7 +60,7 @@ module Trailblazer
 
       # @private
       def read(source, dfn)
-        puts "@@@@@ READ #{dfn[:name].inspect} from #{source}"
+        # puts "@@@@@ READ #{dfn[:name].inspect} from #{source}"
         source[ dfn[:name].to_sym ]
       end
     end

@@ -31,6 +31,10 @@ class TwinTest < Minitest::Spec
       # # per collection
       # # collection_populator: ->(ary, definition) { snippet },
     )
+
+    puts "result"
+    pp twin
+    pp twin[1].taxes[0].amount
   end
 
   it do

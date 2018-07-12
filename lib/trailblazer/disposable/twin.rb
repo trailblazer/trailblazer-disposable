@@ -3,7 +3,7 @@ module Trailblazer
     class Twin
       def initialize(fields) # TODO: we don't check for fields sanity (e.g. all keys, ...)
         @fields  = fields # original values.
-        @updated = {}
+        @changed = {}
       end
 
       extend Declarative::Schema
@@ -53,11 +53,11 @@ module Trailblazer
       private
 
       def read_field(name, definition)
-        @updated.key?(name) ? @updated[name] : @fields[name]
+        @changed.key?(name) ? @changed[name] : @fields[name]
       end
 
       def write_field(name, value, definition)
-        @updated[name] = value
+        @changed[name] = value
       end
 
       module Schema
