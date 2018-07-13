@@ -1,11 +1,14 @@
 require "test_helper"
 
 class TwinTest < Minitest::Spec
+  class Collection < Array
+  end
+
   module Expense
     class Twin < Disposable::Twin
       property :id, twin: ->(value) { value }
 
-      collection :taxes do
+      collection :taxes, collection_populator: ->(items, definition) { Collection.new(items) } do
         property :amount, twin: ->(value) { value }
         property :percent, twin: ->(value) { value }
       end
@@ -35,6 +38,10 @@ class TwinTest < Minitest::Spec
     puts "result"
     pp twin
     pp twin[1].taxes[0].amount
+
+    twin = twin[1]
+
+    twin.taxes.class.must_equal Collection
   end
 
   it do

@@ -31,11 +31,14 @@ module Trailblazer
 
       def process(definition, value, populator:)
         if definition[:nested]
-          if definition[:collection]
 
+          if definition[:collection]
+            # a collection property is a normal property with :nested property (binding) that implements that special
+            # iteration without reading (or rather, reading by index)
             value = value.each_with_index.collect do |item, i|
               process( definition.merge!(collection: false), item, populator: populator) # FIXME: we don't need to #read anymore. Also, we need to pass in the nested definition, not the collection.
             end
+            populator = definition[:collection_populator] # FIXME: this is, of course, wrong design of the property/nesting.
 
             # raise value.inspect
 
