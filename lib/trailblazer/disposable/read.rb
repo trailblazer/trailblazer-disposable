@@ -3,16 +3,6 @@ module Trailblazer
     module Schema
       module_function
 
-      # module Processor
-      #   module_function
-
-      #   def call(definition, source)
-      #     source.each_with_index.collect do |item, i|
-
-      #     end
-      #   end
-      # end
-
       def for_property(definition, source, populator:)
         value = read(source, definition)
 
@@ -28,6 +18,17 @@ module Trailblazer
         pp ary
         ary
       end
+
+      # binding
+      #   read
+      #   process        # value.collect (definitions or items).binding.call
+      #   "populator"
+      #   return [name, value]
+
+      # field
+      #   process        #     1st: definitions.collect   ... later: vale.collect, ...
+      #   populator
+      #   return value
 
       def process(definition, value, populator:)
         if definition[:nested]
