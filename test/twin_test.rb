@@ -31,29 +31,47 @@ class TwinTest < Minitest::Spec
     property :id,
 =end
 
+require "ostruct"
+
   it do
     Runtime = Disposable::Schema::Runtime
 
     model = Struct.new(:id, :taxes, :total).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"))
 
-    populator  = ->(hash, definition) { definition[:twin].new( ::Hash[hash] ) }
+    populator  = ->(hash, definition) {
+      puts "@@@@@ #{hash.inspect} #{definition[:twin]}"
+      definition[:twin].new( hash ) }
     populator_scalar = ->(value, definition) { value }
 
-    nested     = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
+    nested        = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
+    # nested_scalar = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
     scalar     = ->(dfn, value) { value }
 
+    collection = ->(dfn, value) { Runtime.run_collection(dfn[:item_dfn], value) }
 
-    pp Runtime.run_scalar(
+
+    pp twin = Runtime.run_scalar(
       {activity: nested, populator: populator,
         twin: Expense::Twin,
         definitions: [
           {name: :id,    activity: scalar, populator: populator_scalar, definitions: [] },
-          {name: :total, activity: scalar, populator: populator_scalar, definitions: [] },
+          {name: :total, activity: nested, populator: populator, twin: Disposable::Twin,
+            definitions: [
+              {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
+              {name: :currency,  activity: scalar, populator: populator_scalar, definitions: [] },
+            ]
+          },
 
-          # {name: :taxes, activity: nested, populator: populator_scalar, definitions: [] },
+          {name: :taxes, activity: collection, populator: populator, twin: Collection, definitions: [], item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin,
+            definitions: [
+              {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
+              {name: :percent,  activity: scalar, populator: populator_scalar, definitions: [] },
+            ] } },
         ]
       },
       model)
+
+    twin.taxes.class.must_equal Collection
   end
 
 

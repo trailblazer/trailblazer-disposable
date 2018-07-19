@@ -2,6 +2,8 @@ module Trailblazer
   module Disposable
     class Twin
       def initialize(fields) # TODO: we don't check for fields sanity (e.g. all keys, ...)
+        fields = ::Hash[fields] # FIXME: discuss
+
         @fields  = fields # original values.
         @changed = {}
       end
