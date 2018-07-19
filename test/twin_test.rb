@@ -4,6 +4,61 @@ class TwinTest < Minitest::Spec
   class Collection < Array
   end
 
+=begin
+  # hydration (population of new twin)
+#read()
+  values = nested.(source)
+  populator.(values)
+
+    # nested scalar
+    value = read(source)
+      # populator.(value) # no populator needed
+
+    # nested
+    values = read(source)        # eg. source.author
+      values = nested.(values)    # eg.
+      populator.(values)
+
+    # nested collection
+    values = read(source) # source.comments
+      source.collect
+        values = nested.(values)
+        populator.(values)
+      populator.(values)
+
+
+  property :expense, populator: ->(hash, definition) { Expense::Twin.new(hash) }
+    property :id,
+=end
+
+  it do
+    Runtime = Disposable::Schema::Runtime
+
+    model = Struct.new(:id, :taxes, :total).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"))
+
+    populator  = ->(hash, definition) { definition[:twin].new( ::Hash[hash] ) }
+    populator_scalar = ->(value, definition) { value }
+
+    nested     = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
+    scalar     = ->(dfn, value) { value }
+
+
+    pp Runtime.run_scalar(
+      {activity: nested, populator: populator,
+        twin: Expense::Twin,
+        definitions: [
+          {name: :id,    activity: scalar, populator: populator_scalar, definitions: [] },
+          {name: :total, activity: scalar, populator: populator_scalar, definitions: [] },
+
+          # {name: :taxes, activity: nested, populator: populator_scalar, definitions: [] },
+        ]
+      },
+      model)
+  end
+
+
+
+
   module Expense
     class Twin < Disposable::Twin
       property :id, twin: ->(value) { value }

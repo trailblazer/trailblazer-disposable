@@ -3,21 +3,40 @@ module Trailblazer
     module Schema
       module_function
 
-      def for_property(definition, source, populator:)
-        value = read(source, definition)
+      module Runtime
+        module_function
 
-        # go through all definitions! if it's a collection, processor over the collection
+        def run_binding(definition, source)
+          value = read(source, definition)
 
-        value = process(definition, value, populator: populator)
+          value = run_scalar(definition, value)
 
+          ary = [definition[:name].to_sym, value]
+        end
 
+        def run_populator(definition, hash)
+          definition[:populator].(hash, definition)
+        end
 
+        def run_scalar(definition, value)
+          value = definition[:activity].(definition, value) # NestedActivity.()
 
-        ary = [definition[:name].to_sym, value]
-        # ary = [definition[:name].to_sym, Hash[_ary]]
-        pp ary
-        ary
+          value = run_populator(definition, value)
+        end
+
+        def run_collection(definition, value)
+          value.each_with_index.collect do |item, i|
+            run_scalar(definition, item) # TODO: add {i}.
+          end
+        end
+
+        # @private
+        def read(source, dfn)
+          # puts "@@@@@ READ #{dfn[:name].inspect} from #{source}"
+          source[ dfn[:name].to_sym ]
+        end
       end
+
 
       # binding
       #   read
