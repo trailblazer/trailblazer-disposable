@@ -75,19 +75,19 @@ require "ostruct"
             ]
           },
 
-          {name: :taxes, activity: collection, populator: populator, twin: Collection, definitions: [], item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin,
+          {name: :taxes, activity: collection, populator: populator, twin: Collection, item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin,
             definitions: [
               {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
               {name: :percent,  activity: scalar, populator: populator_scalar, definitions: [] },
             ] } },
 
-          {name: :memos, activity: collection, populator: populator, twin: Collection, definitions: [], item_dfn:
+          {name: :memos, activity: collection, populator: populator, twin: Collection, item_dfn:
             {
               activity: nested, populator: populator, twin: Disposable::Twin,
               definitions: [
                 {
                   name: :comments,
-                  activity: collection, populator: populator, twin: Collection, definitions: [], item_dfn:
+                  activity: collection, populator: populator, twin: Collection, item_dfn:
                   {
                     activity: nested, populator: populator, twin: Disposable::Twin,
                     definitions: [
