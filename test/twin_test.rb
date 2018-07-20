@@ -65,17 +65,17 @@ require "ostruct"
 
     pp twin = Runtime.run_scalar(
       {activity: nested, populator: populator,
-        twin: Expense::Twin,
+        twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
         definitions: [
           {name: :id,    activity: scalar, populator: populator_scalar, definitions: [] },
-          {name: :total, activity: nested, populator: populator, twin: Disposable::Twin,
+          {name: :total, activity: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
             definitions: [
               {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
               {name: :currency,  activity: scalar, populator: populator_scalar, definitions: [] },
             ]
           },
 
-          {name: :taxes, activity: collection, populator: populator, twin: Collection, item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin,
+          {name: :taxes, activity: collection, populator: populator, twin: Collection, item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
             definitions: [
               {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
               {name: :percent,  activity: scalar, populator: populator_scalar, definitions: [] },
@@ -83,13 +83,13 @@ require "ostruct"
 
           {name: :memos, activity: collection, populator: populator, twin: Collection, item_dfn:
             {
-              activity: nested, populator: populator, twin: Disposable::Twin,
+              activity: nested, populator: populator, twin: Disposable::Twin.build_for(:comments),
               definitions: [
                 {
                   name: :comments,
                   activity: collection, populator: populator, twin: Collection, item_dfn:
                   {
-                    activity: nested, populator: populator, twin: Disposable::Twin,
+                    activity: nested, populator: populator, twin: Disposable::Twin.build_for(:text),
                     definitions: [
                       {name: :text,  activity: scalar, populator: populator_scalar, definitions: [] },
                     ]
@@ -121,8 +121,11 @@ require "ostruct"
       model)
 
     twin.taxes.class.must_equal Collection
-    # twin.memos.class.must_equal Collection
-    # twin.memos[0].comments.class.must_equal Collection
+    twin.memos.class.must_equal Collection
+    twin.memos[0].comments.class.must_equal Collection
+
+    twin.memos[0].comments[0].text.must_equal "a"
+    twin.memos[0].comments[1].text.must_equal "b"
   end
 
 

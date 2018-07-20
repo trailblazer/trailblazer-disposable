@@ -1,6 +1,12 @@
 module Trailblazer
   module Disposable
     class Twin
+      def self.build_for(*attributes)
+        Class.new(Twin) do
+          attributes.each { |name| create_accessors(name, {}) }
+        end
+      end
+
       def initialize(fields) # TODO: we don't check for fields sanity (e.g. all keys, ...)
         fields = ::Hash[fields] # FIXME: discuss
 
