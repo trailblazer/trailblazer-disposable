@@ -36,17 +36,28 @@ require "ostruct"
   it do
     Runtime = Disposable::Schema::Runtime
 
-    model = Struct.new(:id, :taxes, :total).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"))
+    Memo = Struct.new(:comments)
+    Comment = Struct.new(:text)
 
-    populator  = ->(hash, definition) {
-      puts "@@@@@ #{hash.inspect} #{definition[:twin]}"
-      definition[:twin].new( hash ) }
+    model = Struct.new(:id, :taxes, :total, :memos, :ids_ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"),
+
+      # collection with property with collection
+      [Memo.new([Comment.new("a"), Comment.new("b")])],
+
+      # collection in collection
+      [[1,2], [3,4]]
+    )
+
+    # what to do after the "activity" ran and we collected all values for hydration on that level.
+    populator        = ->(hash, definition) { definition[:twin].new( hash ) }
     populator_scalar = ->(value, definition) { value }
 
-    nested        = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
+    populator_scalar_to_f = ->(value, definition) { value.to_f }
+
+    # "activity": these will be Subprocess( NestedTwin )
+    nested        = ->(dfn, value) { Runtime.run_definitions(dfn, value) }
     # nested_scalar = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
     scalar     = ->(dfn, value) { value }
-
     collection = ->(dfn, value) { Runtime.run_collection(dfn[:item_dfn], value) }
 
 
@@ -67,11 +78,39 @@ require "ostruct"
               {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
               {name: :percent,  activity: scalar, populator: populator_scalar, definitions: [] },
             ] } },
+
+          {name: :memos, activity: collection, populator: populator, twin: Collection, definitions: [], item_dfn:
+            {
+              activity: nested, populator: populator, twin: Disposable::Twin,
+              definitions: [
+                {
+                  name: :comments,
+                  activity: collection, populator: populator, twin: Collection, definitions: [], item_dfn:
+                  {
+                    activity: nested, populator: populator, twin: Disposable::Twin,
+                    definitions: [
+                      {name: :text,  activity: scalar, populator: populator_scalar, definitions: [] },
+                    ]
+                  },
+                }
+              ],
+            }
+          },
+
+
+          {name: :ids_ids, activity: collection, populator: populator, twin: Collection, item_dfn: {
+            activity: collection, populator: populator, twin: Collection, item_dfn: {
+              activity: scalar, populator: populator_scalar_to_f
+            }
+          }
+      },
         ]
       },
       model)
 
     twin.taxes.class.must_equal Collection
+    # twin.memos.class.must_equal Collection
+    # twin.memos[0].comments.class.must_equal Collection
   end
 
 

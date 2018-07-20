@@ -30,6 +30,12 @@ module Trailblazer
           end
         end
 
+        def run_definitions(definition, source)
+          definition[:definitions].collect do |dfn|
+            run_binding(dfn, source)
+          end
+        end
+
         # @private
         def read(source, dfn)
           # puts "@@@@@ READ #{dfn[:name].inspect} from #{source}"
