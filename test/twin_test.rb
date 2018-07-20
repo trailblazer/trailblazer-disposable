@@ -67,18 +67,18 @@ require "ostruct"
       {activity: nested, populator: populator,
         twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
         definitions: [
-          {name: :id,    activity: scalar, populator: populator_scalar, definitions: [] },
+          {name: :id,    activity: scalar, populator: populator_scalar },
           {name: :total, activity: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
             definitions: [
-              {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
-              {name: :currency,  activity: scalar, populator: populator_scalar, definitions: [] },
+              {name: :amount,  activity: scalar, populator: populator_scalar },
+              {name: :currency,  activity: scalar, populator: populator_scalar },
             ]
           },
 
           {name: :taxes, activity: collection, populator: populator, twin: Collection, item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
             definitions: [
-              {name: :amount,  activity: scalar, populator: populator_scalar, definitions: [] },
-              {name: :percent,  activity: scalar, populator: populator_scalar, definitions: [] },
+              {name: :amount,  activity: scalar, populator: populator_scalar },
+              {name: :percent,  activity: scalar, populator: populator_scalar },
             ] } },
 
           {name: :memos, activity: collection, populator: populator, twin: Collection, item_dfn:
@@ -91,7 +91,7 @@ require "ostruct"
                   {
                     activity: nested, populator: populator, twin: Disposable::Twin.build_for(:text),
                     definitions: [
-                      {name: :text,  activity: scalar, populator: populator_scalar, definitions: [] },
+                      {name: :text,  activity: scalar, populator: populator_scalar },
                     ]
                   },
                 }
