@@ -39,20 +39,22 @@ require "ostruct"
     Memo = Struct.new(:comments)
     Comment = Struct.new(:text)
 
-    model = Struct.new(:id, :taxes, :total, :memos, :ids_ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"),
+    model = Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"),
 
       # collection with property with collection
       [Memo.new([Comment.new("a"), Comment.new("b")])],
 
       # collection in collection
-      [[1,2], [3,4]]
+      [[1,2], [3,4]],
+      # collection of scalars
+      [1,2,3]
     )
 
     # what to do after the "activity" ran and we collected all values for hydration on that level.
     populator        = ->(hash, definition) { definition[:twin].new( hash ) }
     populator_scalar = ->(value, definition) { value }
 
-    populator_scalar_to_f = ->(value, definition) { value.to_f }
+    populator_scalar_to_f = ->(value, definition) { value.to_f } # this is just for testing.
 
     # "activity": these will be Subprocess( NestedTwin )
     nested        = ->(dfn, value) { Runtime.run_definitions(dfn, value) }
@@ -99,11 +101,21 @@ require "ostruct"
 
 
           {name: :ids_ids, activity: collection, populator: populator, twin: Collection, item_dfn: {
-            activity: collection, populator: populator, twin: Collection, item_dfn: {
+              activity: collection, populator: populator, twin: Collection, item_dfn: {
+                activity: scalar, populator: populator_scalar_to_f
+              }
+            }
+          },
+
+          {
+            name:       :ids,
+            activity:   collection,
+            populator:  populator,
+            twin:       Collection,
+            item_dfn: {
               activity: scalar, populator: populator_scalar_to_f
             }
-          }
-      },
+          },
         ]
       },
       model)
