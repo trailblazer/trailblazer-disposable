@@ -33,14 +33,89 @@ class TwinTest < Minitest::Spec
 
 require "ostruct"
 
-  it do
     Runtime = Disposable::Schema::Runtime
+#
+  let(:twin_schema) do
 
+# TODO: move that into the Hydration library
+    # what to do after the "activity" ran and we collected all values for hydration on that level.
+    populator        = ->(hash, definition, *) { definition[:twin].new( hash ) }
+    populator_scalar = ->(value, definition, *) { value }
+
+    populator_scalar_to_f = ->(value, definition, *) { value.to_f } # this is just for testing.
+
+    # define recursions:
+    # "activity": these will be Subprocess( NestedTwin )
+    nested        = ->(dfn, value, *args) { Runtime.run_definitions(dfn, value, *args) }
+    # nested_scalar = ->(dfn, value, *args) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value, *args) } }
+    scalar     = ->(dfn, value, *args) { value }
+    collection = ->(dfn, value, *args) { Runtime.run_collection(dfn[:item_dfn], value, *args) }
+
+
+
+    twin_schema = {
+      recursion: nested, populator: populator,
+      twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
+      definitions: [
+        {name: :id,    recursion: scalar, populator: populator_scalar },
+        {name: :total, recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
+          definitions: [
+            {name: :amount,  recursion: scalar, populator: populator_scalar },
+            {name: :currency,  recursion: scalar, populator: populator_scalar },
+          ]
+        },
+
+        {name: :taxes, recursion: collection, populator: populator, twin: Collection, item_dfn: {recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
+          definitions: [
+            {name: :amount,  recursion: scalar, populator: populator_scalar },
+            {name: :percent,  recursion: scalar, populator: populator_scalar },
+          ] } },
+
+        {name: :memos, recursion: collection, populator: populator, twin: Collection, item_dfn:
+          {
+            recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:comments),
+            definitions: [
+              {
+                name: :comments,
+                recursion: collection, populator: populator, twin: Collection, item_dfn:
+                {
+                  recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:text),
+                  definitions: [
+                    {name: :text,  recursion: scalar, populator: populator_scalar },
+                  ]
+                },
+              }
+            ],
+          }
+        },
+
+
+        {name: :ids_ids, recursion: collection, populator: populator, twin: Collection, item_dfn: {
+            recursion: collection, populator: populator, twin: Collection, item_dfn: {
+              recursion: scalar, populator: populator_scalar_to_f
+            }
+          }
+        },
+
+        {
+          name:       :ids,
+          recursion:   collection,
+          populator:  populator,
+          twin:       Collection,
+          item_dfn: {
+            recursion: scalar, populator: populator_scalar_to_f
+          }
+        },
+      ]
+    }
+  end
+
+# hydrate a fresh twin from an existing source model.
+  it do
     Memo = Struct.new(:comments)
     Comment = Struct.new(:text)
 
     model = Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"),
-
       # collection with property with collection
       [Memo.new([Comment.new("a"), Comment.new("b")])],
 
@@ -50,82 +125,34 @@ require "ostruct"
       [1,2,3]
     )
 
-    # what to do after the "activity" ran and we collected all values for hydration on that level.
-    populator        = ->(hash, definition) { definition[:twin].new( hash ) }
-    populator_scalar = ->(value, definition) { value }
-
-    populator_scalar_to_f = ->(value, definition) { value.to_f } # this is just for testing.
-
-    # "activity": these will be Subprocess( NestedTwin )
-    nested        = ->(dfn, value) { Runtime.run_definitions(dfn, value) }
-    # nested_scalar = ->(dfn, value) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value) } }
-    scalar     = ->(dfn, value) { value }
-    collection = ->(dfn, value) { Runtime.run_collection(dfn[:item_dfn], value) }
-
-
-    pp twin = Runtime.run_scalar(
-      {activity: nested, populator: populator,
-        twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
-        definitions: [
-          {name: :id,    activity: scalar, populator: populator_scalar },
-          {name: :total, activity: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
-            definitions: [
-              {name: :amount,  activity: scalar, populator: populator_scalar },
-              {name: :currency,  activity: scalar, populator: populator_scalar },
-            ]
-          },
-
-          {name: :taxes, activity: collection, populator: populator, twin: Collection, item_dfn: {activity: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
-            definitions: [
-              {name: :amount,  activity: scalar, populator: populator_scalar },
-              {name: :percent,  activity: scalar, populator: populator_scalar },
-            ] } },
-
-          {name: :memos, activity: collection, populator: populator, twin: Collection, item_dfn:
-            {
-              activity: nested, populator: populator, twin: Disposable::Twin.build_for(:comments),
-              definitions: [
-                {
-                  name: :comments,
-                  activity: collection, populator: populator, twin: Collection, item_dfn:
-                  {
-                    activity: nested, populator: populator, twin: Disposable::Twin.build_for(:text),
-                    definitions: [
-                      {name: :text,  activity: scalar, populator: populator_scalar },
-                    ]
-                  },
-                }
-              ],
-            }
-          },
-
-
-          {name: :ids_ids, activity: collection, populator: populator, twin: Collection, item_dfn: {
-              activity: collection, populator: populator, twin: Collection, item_dfn: {
-                activity: scalar, populator: populator_scalar_to_f
-              }
-            }
-          },
-
-          {
-            name:       :ids,
-            activity:   collection,
-            populator:  populator,
-            twin:       Collection,
-            item_dfn: {
-              activity: scalar, populator: populator_scalar_to_f
-            }
-          },
-        ]
-      },
-      model)
+    pp twin = Runtime.run_scalar(twin_schema, model)
 
     twin.taxes.class.must_equal Collection
     twin.memos.class.must_equal Collection
     twin.memos[0].comments.class.must_equal Collection
 
+    # read
     twin.memos[0].comments[0].text.must_equal "a"
     twin.memos[0].comments[1].text.must_equal "b"
+    twin.id.must_equal 1
+    twin.taxes.size.must_equal 1
+    twin.taxes[0].amount.must_equal 99
+    twin.taxes[0].percent.must_equal 19
+    twin.total.amount.must_equal 199
+    twin.total.currency.must_equal "EUR"
+  end
+
+# parse document to twin
+  it do
+    document = {
+      id: "1.1"
+    }
+
+    model = Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"), [], [], [])
+    twin = Runtime.run_scalar(twin_schema, model)
+
+    # TODO: call `nested`
+    pp Disposable::Schema::Parse.run_definitions(twin_schema, document, twin)
   end
 
 

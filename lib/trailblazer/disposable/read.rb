@@ -3,25 +3,30 @@ module Trailblazer
     module Schema
       module_function
 
-      module Runtime
+      module Runtime # aka Hydration
         module_function
 
-        def run_binding(definition, source)
-          value = read(source, definition)
+        def run_binding(definition, source, *args) # this is an Activity in the end.
+          value = read(source, definition, *args)
 
-          value = run_scalar(definition, value)
+          value = run_scalar(definition, value, *args)
 
-          ary = [definition[:name].to_sym, value]
+          ary = write(value, definition, *args)
         end
 
-        def run_populator(definition, hash)
-          definition[:populator].(hash, definition)
+        def run_populator(definition, hash, *args)
+          definition[:populator].(hash, definition, *args)
         end
 
-        def run_scalar(definition, value)
-          value = definition[:activity].(definition, value) # NestedActivity.()
+        # step Nested(NestedActivity)
+        # step :populator
+        #
+        #
+        # executed per property, every property!
+        def run_scalar(definition, value, *args)
+          value = definition[:recursion].(definition, value, *args) # NestedActivity.()
 
-          value = run_populator(definition, value)
+          value = run_populator(definition, value, *args)
         end
 
         def run_collection(definition, value)
@@ -30,17 +35,61 @@ module Trailblazer
           end
         end
 
-        def run_definitions(definition, source)
+        def run_definitions(definition, source, *args) # fixme: ARRAY SPLAT IS SLOW
           definition[:definitions].collect do |dfn|
-            run_binding(dfn, source)
+            puts "@@@@@ #{dfn.inspect}"
+            run_binding(dfn, source, *args)
           end
         end
 
         # @private
-        def read(source, dfn)
+        def read(source, dfn, *)
           # puts "@@@@@ READ #{dfn[:name].inspect} from #{source}"
           source[ dfn[:name].to_sym ]
         end
+
+        def write(value, dfn, *)
+          [dfn[:name].to_sym, value]
+        end
+      end
+
+      # Reading from document, writing to twin.
+      module Parse
+        # read
+        # populate / coerce
+        #   run nested
+        # write to twin
+        extend Runtime
+        class << self
+          public :run_definitions # FUCK Ruby
+
+          def run_binding(definition, source, *args) # this is an Activity in the end.
+            value, stop = read(source, definition, *args) # TODO: use Railway.
+            return *args if stop
+
+            value = run_scalar(definition, value, *args)
+
+            twin = write(value, definition, *args)
+          end
+
+          def run_scalar(definition, value, *args)
+            value = definition[:recursion].(definition, value, *args) # NestedActivity.()
+
+            # value = run_populator(definition, value, *args)
+          end
+          def read(source, dfn, twin)
+            return nil, true unless source.key?(dfn[:name]) # Yeah, parsing!
+            return source[ dfn[:name].to_sym ], false
+          end
+
+          def write(source, dfn, twin)
+            # raise source.inspect
+            twin.send("#{dfn[:name]}=", source)
+pp twin
+            twin
+          end
+        end
+
       end
 
 
