@@ -44,16 +44,17 @@ require "ostruct"
 
     populator_scalar_to_f = ->(value, definition, *) { value.to_f } # this is just for testing.
 
+    populator_scalar_parse = ->(dfn, value, twin) { value }
 
     twin_schema = {
       recursion: :recurse_nested, populator: populator,
       twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
       definitions: [
-        {name: :id,    recursion: :recurse_scalar, populator: populator_scalar },
-        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
+        {name: :id,    recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
+        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, parent_twin) { parent_twin.total },
           definitions: [
-            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar },
-            {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar },
+            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
+            {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
           ]
         },
 

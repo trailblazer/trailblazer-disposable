@@ -73,11 +73,12 @@ module Trailblazer
         #   run nested
         # write to twin
         extend Runtime
+
         class << self
           public :run_definitions # FUCK Ruby
 
           def run_binding(dfn, source, *args) # this is an Activity in the end.
-            value, stop = read(source, dfn, *args) # TODO: use Railway.
+            value, stop = read(source, dfn, *args) # TODO: use Railway. # TODO: allow to always run populator.
             return *args if stop
 
             value = run_scalar(dfn, value, *args)
@@ -86,13 +87,21 @@ module Trailblazer
           end
 
           def run_scalar(dfn, value, *args)
-            value = send(dfn[:recursion], dfn, value, *args) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
+            # in Reform, the parsing pipeline works OK for most people:
+            # 1. fetch the property fragment (in {binding})
+            # 2. run the populator
+            # 3. parse the nested properties "onto" the twin that the populator returned
+            # 4. attach the "new" twin to the parent twin.
 
-            # value = run_populator(dfn, value, *args)
+            twin = run_populator(dfn, value, *args)
+
+            value = send(dfn[:recursion], dfn, value, twin) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
+            # pp value
+            twin
           end
           def read(source, dfn, twin)
             return nil, true unless source.key?(dfn[:name]) # Yeah, parsing!
-            puts "@@@@@< #{dfn[:name].inspect} #{source.inspect}"
+            # puts "@@@@@< #{dfn[:name].inspect} #{source.inspect}"
             return source[ dfn[:name].to_sym ], false
           end
 
@@ -101,6 +110,10 @@ module Trailblazer
             puts "@@@@@> #{dfn[:name].inspect} #{source.inspect} #{twin.inspect}"
             twin.send("#{dfn[:name]}=", source)
             twin
+          end
+
+          def run_populator(definition, hash, twin)
+            definition[:parse_populator].(definition, hash, twin)
           end
         end
 
