@@ -44,44 +44,36 @@ require "ostruct"
 
     populator_scalar_to_f = ->(value, definition, *) { value.to_f } # this is just for testing.
 
-    # define recursions:
-    # "activity": these will be Subprocess( NestedTwin )
-    nested        = ->(dfn, value, *args) { Runtime.run_definitions(dfn, value, *args) }
-    # nested_scalar = ->(dfn, value, *args) { dfn[:definitions].collect { |dfn| Runtime.run_binding(dfn, value, *args) } }
-    scalar     = ->(dfn, value, *args) { value }
-    collection = ->(dfn, value, *args) { Runtime.run_collection(dfn[:item_dfn], value, *args) }
-
-
 
     twin_schema = {
-      recursion: nested, populator: populator,
+      recursion: :recurse_nested, populator: populator,
       twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
       definitions: [
-        {name: :id,    recursion: scalar, populator: populator_scalar },
-        {name: :total, recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
+        {name: :id,    recursion: :recurse_scalar, populator: populator_scalar },
+        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency),
           definitions: [
-            {name: :amount,  recursion: scalar, populator: populator_scalar },
-            {name: :currency,  recursion: scalar, populator: populator_scalar },
+            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar },
+            {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar },
           ]
         },
 
-        {name: :taxes, recursion: collection, populator: populator, twin: Collection, item_dfn: {recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
+        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn: {recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
           definitions: [
-            {name: :amount,  recursion: scalar, populator: populator_scalar },
-            {name: :percent,  recursion: scalar, populator: populator_scalar },
+            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar },
+            {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar },
           ] } },
 
-        {name: :memos, recursion: collection, populator: populator, twin: Collection, item_dfn:
+        {name: :memos, recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn:
           {
-            recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:comments),
+            recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:comments),
             definitions: [
               {
                 name: :comments,
-                recursion: collection, populator: populator, twin: Collection, item_dfn:
+                recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn:
                 {
-                  recursion: nested, populator: populator, twin: Disposable::Twin.build_for(:text),
+                  recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:text),
                   definitions: [
-                    {name: :text,  recursion: scalar, populator: populator_scalar },
+                    {name: :text,  recursion: :recurse_scalar, populator: populator_scalar },
                   ]
                 },
               }
@@ -89,21 +81,20 @@ require "ostruct"
           }
         },
 
-
-        {name: :ids_ids, recursion: collection, populator: populator, twin: Collection, item_dfn: {
-            recursion: collection, populator: populator, twin: Collection, item_dfn: {
-              recursion: scalar, populator: populator_scalar_to_f
+        {name: :ids_ids, recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn: {
+            recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn: {
+              recursion: :recurse_scalar, populator: populator_scalar_to_f
             }
           }
         },
 
         {
           name:       :ids,
-          recursion:   collection,
+          recursion:   :recurse_collection,
           populator:  populator,
           twin:       Collection,
           item_dfn: {
-            recursion: scalar, populator: populator_scalar_to_f
+            recursion: :recurse_scalar, populator: populator_scalar_to_f
           }
         },
       ]
@@ -145,14 +136,25 @@ require "ostruct"
 # parse document to twin
   it do
     document = {
-      id: "1.1"
+      id: "1.1",
+
+      total: {
+        amount: 100,
+        # currency  : 7,
+      }
     }
 
     model = Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"), [], [], [])
     twin = Runtime.run_scalar(twin_schema, model)
 
     # TODO: call `nested`
-    pp Disposable::Schema::Parse.run_definitions(twin_schema, document, twin)
+    twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin)
+
+    twin = twin[0] # FIXME
+
+    pp twin
+
+    twin.id.must_equal "1.1"
   end
 
 

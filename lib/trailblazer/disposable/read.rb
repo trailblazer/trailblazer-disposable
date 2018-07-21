@@ -6,6 +6,19 @@ module Trailblazer
       module Runtime # aka Hydration
         module_function
 
+        def recurse_nested(dfn, value, *args)
+          run_definitions(dfn, value, *args)
+        end
+
+        def recurse_scalar(dfn, value, *args)
+          value
+        end
+
+        def recurse_collection(dfn, value, *args)
+          run_collection(dfn[:item_dfn], value, *args)
+        end
+
+
         def run_binding(definition, source, *args) # this is an Activity in the end.
           value = read(source, definition, *args)
 
@@ -24,7 +37,8 @@ module Trailblazer
         #
         # executed per property, every property!
         def run_scalar(definition, value, *args)
-          value = definition[:recursion].(definition, value, *args) # NestedActivity.()
+          # e.g. recurse_collection
+          value = send(definition[:recursion], definition, value, *args) # NestedActivity.()
 
           value = run_populator(definition, value, *args)
         end
@@ -37,7 +51,6 @@ module Trailblazer
 
         def run_definitions(definition, source, *args) # fixme: ARRAY SPLAT IS SLOW
           definition[:definitions].collect do |dfn|
-            puts "@@@@@ #{dfn.inspect}"
             run_binding(dfn, source, *args)
           end
         end
@@ -63,29 +76,30 @@ module Trailblazer
         class << self
           public :run_definitions # FUCK Ruby
 
-          def run_binding(definition, source, *args) # this is an Activity in the end.
-            value, stop = read(source, definition, *args) # TODO: use Railway.
+          def run_binding(dfn, source, *args) # this is an Activity in the end.
+            value, stop = read(source, dfn, *args) # TODO: use Railway.
             return *args if stop
 
-            value = run_scalar(definition, value, *args)
+            value = run_scalar(dfn, value, *args)
 
-            twin = write(value, definition, *args)
+            twin = write(value, dfn, *args)
           end
 
-          def run_scalar(definition, value, *args)
-            value = definition[:recursion].(definition, value, *args) # NestedActivity.()
+          def run_scalar(dfn, value, *args)
+            value = send(dfn[:recursion], dfn, value, *args) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
 
-            # value = run_populator(definition, value, *args)
+            # value = run_populator(dfn, value, *args)
           end
           def read(source, dfn, twin)
             return nil, true unless source.key?(dfn[:name]) # Yeah, parsing!
+            puts "@@@@@< #{dfn[:name].inspect} #{source.inspect}"
             return source[ dfn[:name].to_sym ], false
           end
 
           def write(source, dfn, twin)
             # raise source.inspect
+            puts "@@@@@> #{dfn[:name].inspect} #{source.inspect} #{twin.inspect}"
             twin.send("#{dfn[:name]}=", source)
-pp twin
             twin
           end
         end
