@@ -14,10 +14,7 @@ class TwinTest < Minitest::Spec
 
     # TODO: only prototyping
     def to_diff
-      {
-        deleted: @deleted,
-
-      }
+      collect { |el| el }
     end
   end
 
@@ -76,9 +73,9 @@ require "ostruct"
             # here, we match by {percent}
             # existing = twin.find { |el| el.percent == fragment[:percent] }
 
-            twin << item = OpenStruct.new
-            {twin: item}
+            twin << item = dfn[:twin].new({}) # TODO: introduce a "parse twin" that is mutable
 
+            {twin: item}
           end
         end
       end
@@ -262,11 +259,14 @@ require "ostruct"
       twin = _twin[0] # FIXME
       pp twin
 
-      twin.taxes.size.must_equal 3
+# the "new" taxes collection represents the parsed incoming collection, not the old one.
+      twin.taxes.size.must_equal 2
+      twin.taxes[0].amount.must_equal 190
+      twin.taxes[1].amount.must_equal 200
 
-      twin.taxes.to_diff.must_equal(
-        deleted: [tax_1]
-      )
+# we still have the original collection.
+      twin.instance_variable_get(:@changed)[:taxes][0].amount.must_equal 190
+      # TODO: Twin.to_h(twin)
     end
 
     it "allows replacing items" do
