@@ -2,6 +2,23 @@ require "test_helper"
 
 class TwinTest < Minitest::Spec
   class Collection < Array
+    def initialize(*items)
+        super(*items)
+
+        @deleted = []
+      end
+
+    def delete_all!
+      each { |item| @deleted = to_a }
+    end
+
+    # TODO: only prototyping
+    def to_diff
+      {
+        deleted: @deleted,
+
+      }
+    end
   end
 
 =begin
@@ -34,6 +51,19 @@ class TwinTest < Minitest::Spec
 require "ostruct"
 
     Runtime = Disposable::Schema::Runtime
+
+    module Populator
+      module Collection
+        def self.call(dfn, fragment, twin:, **)
+          collection = twin.send(dfn[:name]) # provide the original collection
+
+          return collection.delete_all! if fragment.empty? # THIS IS AN ASSUMPTION WE DO. this should be an Activity.
+          # it would be cool if we could jump to failure here and then skip the parsing explicitly, not because `fragment` is empty.
+
+          collection
+        end
+      end
+    end
 #
   let(:twin_schema) do
 
@@ -58,7 +88,7 @@ require "ostruct"
           ]
         },
 
-        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: ->(dfn, fragment, twin:, **) { twin.taxes },
+        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: Populator::Collection,
           item_dfn: {
             recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: ->(dfn, fragment, twin:, index:, **) { twin[index] },
             definitions: [
@@ -138,39 +168,87 @@ require "ostruct"
   end
 
 # parse document to twin
-  it do
-    document = {
-      id: "1.1",
 
-      total: {
-        amount: 100,
-        # currency  : 7,
-      },
+  describe "Parse" do
+    let(:model) { Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"), [], [], []) }
+    let(:twin)  { Runtime.run_scalar(twin_schema, model) }
 
-      taxes: [
-        { amount: 98, percent: 9},
-      ]
-    }
+    it do
+      document = {
+        id: "1.1",
 
-    model = Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"), [], [], [])
-    twin = Runtime.run_scalar(twin_schema, model)
+        total: {
+          amount: 100,
+          # currency  : 7,
+        },
 
-    # TODO: call `nested`
-    twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin: twin)
+        taxes: [
+          { amount: 98, percent: 9},
+        ]
+      }
 
-    twin = twin[0] # FIXME
 
-    pp twin
+      # TODO: call `nested`
 
-    twin.id.must_equal "1.1"
-    twin.total.amount.must_equal 100
+      _twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin: twin)
 
-    twin.taxes.size.must_equal 1
-    twin.taxes[0].amount.must_equal 98
-    twin.taxes[0].percent.must_equal 9
+      twin = _twin[0] # FIXME
 
-    # TODO:
-    # twin.diff
+      pp twin
+
+      twin.id.must_equal "1.1"
+      twin.total.amount.must_equal 100
+
+      twin.taxes.size.must_equal 1
+      twin.taxes[0].amount.must_equal 98
+      twin.taxes[0].percent.must_equal 9
+
+      # TODO:
+      # twin.diff
+    end
+
+    it "allows resetting collections" do
+      document = {
+        taxes: []
+      }
+
+      tax_1 = twin.taxes[0]
+
+      _twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin: twin)
+
+      twin = _twin[0] # FIXME
+
+      pp twin
+
+      twin.taxes.size.must_equal 1 # collection is reset
+      twin.taxes.to_diff.must_equal(
+        deleted: [tax_1]
+      )
+
+      # TODO: twin.diff
+    end
+
+    it "allows adding and removing items" do
+      document = {
+        taxes: [
+          { amount: 190, percent: 19 },
+          { amount: 200, percent: 7  },
+        ]
+      }
+
+      tax_1 = twin.taxes[0]
+
+      _twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin: twin)
+
+      twin = _twin[0] # FIXME
+      pp twin
+
+      twin.taxes.size.must_equal 3
+
+      twin.taxes.to_diff.must_equal(
+        deleted: [tax_1]
+      )
+    end
   end
 
 
