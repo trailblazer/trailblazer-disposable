@@ -236,10 +236,11 @@ require "ostruct"
 
       pp twin
 
-      twin.taxes.size.must_equal 1 # collection is reset
-      twin.taxes.to_diff.must_equal(
-        deleted: [tax_1]
-      )
+      twin.taxes.size.must_equal 0 # collection is reset
+
+    # original collection is still there
+      twin.instance_variable_get(:@fields)[:taxes].size.must_equal 1
+      twin.instance_variable_get(:@fields)[:taxes][0].amount.must_equal 99
 
       # TODO: twin.diff
     end
@@ -265,7 +266,7 @@ require "ostruct"
       twin.taxes[1].amount.must_equal 200
 
 # we still have the original collection.
-      twin.instance_variable_get(:@changed)[:taxes][0].amount.must_equal 190
+      twin.instance_variable_get(:@fields)[:taxes][0].amount.must_equal 99
       # TODO: Twin.to_h(twin)
     end
 
