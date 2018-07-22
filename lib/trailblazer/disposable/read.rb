@@ -49,9 +49,9 @@ module Trailblazer
           end
         end
 
-        def run_definitions(definition, source, *args) # fixme: ARRAY SPLAT IS SLOW
+        def run_definitions(definition, source, **args) # fixme: ARRAY SPLAT IS SLOW
           definition[:definitions].collect do |dfn|
-            run_binding(dfn, source, *args)
+            run_binding(dfn, source, **args)
           end
         end
 
@@ -93,11 +93,12 @@ module Trailblazer
             # 3. parse the nested properties "onto" the twin that the populator returned
             # 4. attach the "new" twin to the parent twin.
 
-            twin = run_populator(dfn, value, **args)
+            populated_cfg = run_populator(dfn, value, **args)
 
-            value = send(dfn[:recursion], dfn, value, twin: twin) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
+            value = send(dfn[:recursion], dfn, value, populated_cfg) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
             # pp value
-            twin
+
+            populated_cfg[:twin] # DISCUSS: what to return here?
           end
           def read(source, dfn, **)
             return nil, true unless source.key?(dfn[:name]) # Yeah, parsing!

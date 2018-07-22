@@ -55,12 +55,31 @@ require "ostruct"
     module Populator
       module Collection
         def self.call(dfn, fragment, twin:, **)
+          # {twin} is the parent twin, the {Expense}.
+
           collection = twin.send(dfn[:name]) # provide the original collection
 
-          return collection.delete_all! if fragment.empty? # THIS IS AN ASSUMPTION WE DO. this should be an Activity.
+          # return collection.delete_all! if fragment.empty? # THIS IS AN ASSUMPTION WE DO. this should be an Activity.
           # it would be cool if we could jump to failure here and then skip the parsing explicitly, not because `fragment` is empty.
 
-          collection
+          {twin: TwinTest::Collection.new, original_collection: collection}
+        end
+
+        module Item
+          def self.call(dfn, fragment, twin:, index:, original_collection:, **)
+            # {twin} is the new collection
+            # {original_collection} is the, well, original collection
+
+
+            # twin[index]  # TODO: test "simple" populator where we use index, only.
+
+            # here, we match by {percent}
+            # existing = twin.find { |el| el.percent == fragment[:percent] }
+
+            twin << item = OpenStruct.new
+            {twin: item}
+
+          end
         end
       end
     end
@@ -74,14 +93,14 @@ require "ostruct"
 
     populator_scalar_to_f = ->(value, definition, *) { value.to_f } # this is just for testing.
 
-    populator_scalar_parse = ->(dfn, value, twin) { value }
+    populator_scalar_parse = ->(dfn, value, twin) { {twin: value} }
 
     twin_schema = {
       recursion: :recurse_nested, populator: populator,
       twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
       definitions: [
         {name: :id,    recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
-        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { twin.total },
+        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { {twin: twin.total} },
           definitions: [
             {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
             {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
@@ -90,10 +109,10 @@ require "ostruct"
 
         {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: Populator::Collection,
           item_dfn: {
-            recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: ->(dfn, fragment, twin:, index:, **) { twin[index] },
+            recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: Populator::Collection::Item,
             definitions: [
-              {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { fragment } },
-              {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { fragment } },
+              {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} } },
+              {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} } },
             ]
         } },
 
@@ -231,7 +250,7 @@ require "ostruct"
     it "allows adding and removing items" do
       document = {
         taxes: [
-          { amount: 190, percent: 19 },
+          { amount: 190, percent: 20 },
           { amount: 200, percent: 7  },
         ]
       }
@@ -248,6 +267,10 @@ require "ostruct"
       twin.taxes.to_diff.must_equal(
         deleted: [tax_1]
       )
+    end
+
+    it "allows replacing items" do
+
     end
   end
 
