@@ -51,18 +51,21 @@ require "ostruct"
       twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
       definitions: [
         {name: :id,    recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
-        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, parent_twin) { parent_twin.total },
+        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { twin.total },
           definitions: [
             {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
             {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
           ]
         },
 
-        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn: {recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent),
-          definitions: [
-            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar },
-            {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar },
-          ] } },
+        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: ->(dfn, fragment, twin:, **) { twin.taxes },
+          item_dfn: {
+            recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: ->(dfn, fragment, twin:, index:, **) { twin[index] },
+            definitions: [
+              {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { fragment } },
+              {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { fragment } },
+            ]
+        } },
 
         {name: :memos, recursion: :recurse_collection, populator: populator, twin: Collection, item_dfn:
           {
@@ -142,20 +145,32 @@ require "ostruct"
       total: {
         amount: 100,
         # currency  : 7,
-      }
+      },
+
+      taxes: [
+        { amount: 98, percent: 9},
+      ]
     }
 
     model = Struct.new(:id, :taxes, :total, :memos, :ids_ids, :ids).new(1, [Struct.new(:amount, :percent).new(99, 19)], Struct.new(:amount, :currency).new(199, "EUR"), [], [], [])
     twin = Runtime.run_scalar(twin_schema, model)
 
     # TODO: call `nested`
-    twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin)
+    twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin: twin)
 
     twin = twin[0] # FIXME
 
     pp twin
 
     twin.id.must_equal "1.1"
+    twin.total.amount.must_equal 100
+
+    twin.taxes.size.must_equal 1
+    twin.taxes[0].amount.must_equal 98
+    twin.taxes[0].percent.must_equal 9
+
+    # TODO:
+    # twin.diff
   end
 
 

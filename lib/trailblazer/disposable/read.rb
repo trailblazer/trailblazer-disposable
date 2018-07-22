@@ -43,9 +43,9 @@ module Trailblazer
           value = run_populator(definition, value, *args)
         end
 
-        def run_collection(definition, value)
+        def run_collection(definition, value, **args)
           value.each_with_index.collect do |item, i|
-            run_scalar(definition, item) # TODO: add {i}.
+            run_scalar(definition, item, args.merge(index: i)) # TODO: optimize {i}. TEST!!!!!!!!!
           end
         end
 
@@ -77,43 +77,41 @@ module Trailblazer
         class << self
           public :run_definitions # FUCK Ruby
 
-          def run_binding(dfn, source, *args) # this is an Activity in the end.
-            value, stop = read(source, dfn, *args) # TODO: use Railway. # TODO: allow to always run populator.
-            return *args if stop
+          def run_binding(dfn, source, **args) # this is an Activity in the end.
+            value, stop = read(source, dfn, **args) # TODO: use Railway. # TODO: allow to always run populator.
+            return args[:twin] if stop
 
-            value = run_scalar(dfn, value, *args)
+            value = run_scalar(dfn, value, **args)
 
-            twin = write(value, dfn, *args)
+            twin = write(value, dfn, **args)
           end
 
-          def run_scalar(dfn, value, *args)
+          def run_scalar(dfn, value, **args)
             # in Reform, the parsing pipeline works OK for most people:
             # 1. fetch the property fragment (in {binding})
             # 2. run the populator
             # 3. parse the nested properties "onto" the twin that the populator returned
             # 4. attach the "new" twin to the parent twin.
 
-            twin = run_populator(dfn, value, *args)
+            twin = run_populator(dfn, value, **args)
 
-            value = send(dfn[:recursion], dfn, value, twin) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
+            value = send(dfn[:recursion], dfn, value, twin: twin) # NestedActivity.()   # FIXME!!!!!!!!!!!!!!! redundant
             # pp value
             twin
           end
-          def read(source, dfn, twin)
+          def read(source, dfn, **)
             return nil, true unless source.key?(dfn[:name]) # Yeah, parsing!
             # puts "@@@@@< #{dfn[:name].inspect} #{source.inspect}"
             return source[ dfn[:name].to_sym ], false
           end
 
-          def write(source, dfn, twin)
-            # raise source.inspect
-            puts "@@@@@> #{dfn[:name].inspect} #{source.inspect} #{twin.inspect}"
+          def write(source, dfn, twin:, **)
             twin.send("#{dfn[:name]}=", source)
             twin
           end
 
-          def run_populator(definition, hash, twin)
-            definition[:parse_populator].(definition, hash, twin)
+          def run_populator(definition, hash, **args)
+            definition[:parse_populator].(definition, hash, **args)
           end
         end
 
