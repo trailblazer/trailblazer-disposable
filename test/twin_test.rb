@@ -87,6 +87,7 @@ require "ostruct"
     # what to do after the "activity" ran and we collected all values for hydration on that level.
     populator        = ->(hash, definition, *) { definition[:twin].new( hash ) }
     populator_scalar = ->(value, definition, *) { value }
+    populator_to_h = ->(value, definition, *) { Hash[value] }
 
     populator_scalar_to_f = ->(value, definition, *) { value.to_f } # this is just for testing.
 
@@ -95,21 +96,22 @@ require "ostruct"
     twin_schema = {
       recursion: :recurse_nested, populator: populator,
       twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
+      to_hash_populator: populator_to_h,
       definitions: [
-        {name: :id,    recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
-        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { {twin: twin.total} },
+        {name: :id,    recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse, to_hash_populator: populator_scalar },
+        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { {twin: twin.total} }, to_hash_populator: populator_to_h,
           definitions: [
-            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
-            {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse },
+            {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse, to_hash_populator: populator_scalar },
+            {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse, to_hash_populator: populator_scalar },
           ]
         },
 
-        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: Populator::Collection,
+        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: Populator::Collection, to_hash_populator: populator_scalar,
           item_dfn: {
-            recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: Populator::Collection::Item,
+            name: :bla, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: Populator::Collection::Item, to_hash_populator: populator_to_h,
             definitions: [
-              {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} } },
-              {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} } },
+              {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} }, to_hash_populator: populator_scalar },
+              {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} }, to_hash_populator: populator_scalar },
             ]
         } },
 
@@ -268,11 +270,29 @@ require "ostruct"
 # we still have the original collection.
       twin.instance_variable_get(:@fields)[:taxes][0].amount.must_equal 99
       # TODO: Twin.to_h(twin)
+
+# to_h
+puts "yo"
+_twin_schema = twin_schema.dup
+_twin_schema[:definitions].pop
+_twin_schema[:definitions].pop
+_twin_schema[:definitions].pop
+pp _twin_schema
+
+      hash = Disposable::Schema::ToHash.run_scalar(_twin_schema, twin)
+
+      hash.must_equal(
+        {
+          :id=>1,
+          :total=>{:amount=>199, :currency=>"EUR"},
+          :taxes=>[
+            {:amount=>190, :percent=>20},
+            {:amount=>200, :percent=>7}
+          ]
+        }
+      )
     end
 
-    it "allows replacing items" do
-
-    end
   end
 
 

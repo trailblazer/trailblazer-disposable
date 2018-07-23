@@ -1,3 +1,7 @@
+# * instead of if dfn[:nested], the dfn already contains its recursor configured,
+#   which is called by the parent node processor.
+# * the schema is completely "behaviorless". that allows reusing it for different jobs.
+
 module Trailblazer
   module Disposable
     module Schema
@@ -18,7 +22,6 @@ module Trailblazer
           run_collection(dfn[:item_dfn], value, *args)
         end
 
-
         def run_binding(definition, source, *args) # this is an Activity in the end.
           value = read(source, definition, *args)
 
@@ -33,7 +36,6 @@ module Trailblazer
 
         # step Nested(NestedActivity)
         # step :populator
-        #
         #
         # executed per property, every property!
         def run_scalar(definition, value, *args)
@@ -55,9 +57,7 @@ module Trailblazer
           end
         end
 
-        # @private
         def read(source, dfn, *)
-          # puts "@@@@@ READ #{dfn[:name].inspect} from #{source}"
           source[ dfn[:name].to_sym ]
         end
 
@@ -114,6 +114,22 @@ module Trailblazer
 
           def run_populator(definition, hash, **args)
             definition[:parse_populator].(definition, hash, **args)
+          end
+        end
+      end # Parse
+
+      module ToHash
+        extend Runtime
+
+        class << self
+          public :run_scalar # FUCK Ruby
+
+          def read(source, dfn, *) # FIXME: just prototyping, we might not need this function.
+            source.send(dfn[:name])
+          end
+
+          def run_populator(definition, hash, *args) # TODO: this sucks, how could we undo that step? we don't need it in {#to_hash}.
+            definition[:to_hash_populator].(hash, definition, *args)
           end
         end
 
