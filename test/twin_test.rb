@@ -272,13 +272,12 @@ require "ostruct"
       # TODO: Twin.to_h(twin)
 
 # to_h
-puts "yo"
 _twin_schema = twin_schema.dup
 _twin_schema[:definitions].pop
 _twin_schema[:definitions].pop
 _twin_schema[:definitions].pop
-pp _twin_schema
 
+# render the complete twin with effective values
       hash = Disposable::Schema::ToHash.run_scalar(_twin_schema, twin)
 
       hash.must_equal(
@@ -291,7 +290,13 @@ pp _twin_schema
           ]
         }
       )
+
+      # render only changed
+      pp twin.instance_variable_get(:@changed)
+            hash = Disposable::Schema::ToHash::Changed.run_scalar(_twin_schema, twin.instance_variable_get(:@changed))  # FIXME.
     end
+
+
 
   end
 

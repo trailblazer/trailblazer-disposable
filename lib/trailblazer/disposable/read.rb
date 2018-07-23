@@ -103,7 +103,6 @@ module Trailblazer
 
           def read(source, dfn, **)
             return nil, true unless source.key?(dfn[:name]) # Yeah, parsing!
-
             return source[ dfn[:name].to_sym ], false
           end
 
@@ -133,6 +132,22 @@ module Trailblazer
           end
         end
 
+        module Changed
+          extend Runtime
+          # extend ToHash
+
+          class << self
+            public :run_scalar # FUCK Ruby
+
+            def recurse_nested(dfn, value, *args)
+              super(dfn, value.instance_variable_get(:@changed))
+            end
+
+            def run_populator(definition, hash, *args) # TODO: this sucks, how could we undo that step? we don't need it in {#to_hash}.
+              definition[:to_hash_populator].(hash, definition, *args)
+            end
+          end
+        end
       end
 
 
