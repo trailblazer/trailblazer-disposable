@@ -22,13 +22,16 @@ module Trailblazer
           run_collection(dfn[:item_dfn], value, *args)
         end
 
-        def run_binding(definition, source, *args) # this is an Activity in the end.
-          value = read(source, definition, *args)
+        def run_binding(dfn, source, **args) # this is an Activity in the end.
+          value, stop = read(source, dfn, **args) # TODO: use Railway. # TODO: allow to always run populator.
 
-          value = run_scalar(definition, value, *args)
+          return args[:twin] if stop
 
-          ary = write(value, definition, *args)
+          value = run_scalar(dfn, value, **args)
+
+          twin = write(value, dfn, **args)
         end
+
 
         def run_populator(definition, hash, *args)
           definition[:populator].(hash, definition, *args)
@@ -58,7 +61,7 @@ module Trailblazer
         end
 
         def read(source, dfn, *)
-          source[ dfn[:name].to_sym ]
+          return source[ dfn[:name].to_sym ], nil # TODO: sort out the STOP with Railway
         end
 
         def write(value, dfn, *)
@@ -76,15 +79,6 @@ module Trailblazer
 
         class << self
           public :run_definitions # FUCK Ruby
-
-          def run_binding(dfn, source, **args) # this is an Activity in the end.
-            value, stop = read(source, dfn, **args) # TODO: use Railway. # TODO: allow to always run populator.
-            return args[:twin] if stop
-
-            value = run_scalar(dfn, value, **args)
-
-            twin = write(value, dfn, **args)
-          end
 
           def run_scalar(dfn, value, **args)
             # in Reform, the parsing pipeline works OK for most people:
@@ -124,7 +118,7 @@ module Trailblazer
           public :run_scalar # FUCK Ruby
 
           def read(source, dfn, *) # FIXME: just prototyping, we might not need this function.
-            source.send(dfn[:name])
+            return source.send(dfn[:name]), nil
           end
 
           def run_populator(definition, hash, *args) # TODO: this sucks, how could we undo that step? we don't need it in {#to_hash}.
@@ -140,11 +134,16 @@ module Trailblazer
             public :run_scalar # FUCK Ruby
 
             def recurse_nested(dfn, value, *args)
+              puts "@@@@@ grabbing @changed #{value.inspect} in >>>>>>>>> #{dfn[:name]}"
               super(dfn, value.instance_variable_get(:@changed))
             end
 
             def run_populator(definition, hash, *args) # TODO: this sucks, how could we undo that step? we don't need it in {#to_hash}.
               definition[:to_hash_populator].(hash, definition, *args)
+            end
+
+            def read(source, dfn, **options) # fixme: from Parse
+              Parse.read(source, dfn, **options)
             end
           end
         end

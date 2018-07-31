@@ -87,7 +87,7 @@ require "ostruct"
     # what to do after the "activity" ran and we collected all values for hydration on that level.
     populator        = ->(hash, definition, *) { definition[:twin].new( hash ) }
     populator_scalar = ->(value, definition, *) { value }
-    populator_to_h = ->(value, definition, *) { Hash[value] }
+    populator_to_h = ->(value, definition, *) { Hash[value.compact] }
 
     populator_scalar_to_f = ->(value, definition, *) { value.to_f } # this is just for testing.
 
@@ -291,13 +291,20 @@ _twin_schema[:definitions].pop
         }
       )
 
-      # render only changed
+puts "yayyyy"
+# render only changed
       pp twin.instance_variable_get(:@changed)
-            hash = Disposable::Schema::ToHash::Changed.run_scalar(_twin_schema, twin.instance_variable_get(:@changed))  # FIXME.
+            hash = Disposable::Schema::ToHash::Changed.run_scalar(_twin_schema, twin)  # FIXME.
+            pp hash
+      hash.must_equal(
+        {
+          :taxes=>[
+            {:amount=>190, :percent=>20},
+            {:amount=>200, :percent=>7}
+          ]
+        }
+      )
     end
-
-
-
   end
 
 
