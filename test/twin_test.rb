@@ -304,6 +304,18 @@ puts "yayyyy"
           ]
         }
       )
+
+      require "dry-validation"
+      schema = Dry::Validation::Schema() do
+        required(:id).filled
+      end
+
+      # pp schema.(hash).errors
+      schema.(hash).errors.must_equal(
+        {:id=>["is missing"]}
+      )
+
+      # diese fehler müssen jetzt auf das Form überschreiben werden
     end
   end
 
