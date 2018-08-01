@@ -153,6 +153,14 @@ require "ostruct"
     }
   end
 
+  let(:_twin_schema) do
+    _twin_schema = twin_schema.dup
+    _twin_schema[:definitions].pop
+    _twin_schema[:definitions].pop
+    _twin_schema[:definitions].pop
+    _twin_schema
+  end
+
 # hydrate a fresh twin from an existing source model.
   it do
     Memo = Struct.new(:comments)
@@ -272,10 +280,6 @@ require "ostruct"
       # TODO: Twin.to_h(twin)
 
 # to_h
-_twin_schema = twin_schema.dup
-_twin_schema[:definitions].pop
-_twin_schema[:definitions].pop
-_twin_schema[:definitions].pop
 
 # render the complete twin with effective values
       hash = Disposable::Schema::ToHash.run_scalar(_twin_schema, twin)
@@ -305,14 +309,35 @@ puts "yayyyy"
         }
       )
 
+      # TODO: where do we coerce, e.g. 200,12 => 20012
+    end
+
+    it "validates" do
+      document = {
+        taxes: [
+          { amount: 190, percent: 200.01 },
+        ]
+      }
+
+      _twin = Disposable::Schema::Parse.run_definitions(twin_schema, document, twin: twin)
+
       require "dry-validation"
       schema = Dry::Validation::Schema() do
         required(:id).filled
+        required(:taxes).each do
+          schema do
+            required(:amount).filled(:int?)
+            required(:percent).filled(:int?, lteq?: 100)
+          end
+        end
       end
+
+      # "validate"
+      hash = Disposable::Schema::ToHash::Changed.run_scalar(_twin_schema, twin)  # FIXME.
 
       # pp schema.(hash).errors
       schema.(hash).errors.must_equal(
-        {:id=>["is missing"]}
+        {:id=>["is missing"], :taxes=>{0=>{:percent=>["must be an integer"]}}}
       )
 
       # diese fehler müssen jetzt auf das Form überschreiben werden
