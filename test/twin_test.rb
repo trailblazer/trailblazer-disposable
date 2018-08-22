@@ -93,22 +93,28 @@ require "ostruct"
 
     populator_scalar_parse = ->(dfn, value, twin) { {twin: value} }
 
+    # e.g. for {total}
+    populator_to_errors = ->(twin, dfn, errors: ) {
+puts "@@@@@*#{dfn[:name]}=== #{twin.inspect}"
+      [twin, errors: errors[dfn[:name].to_sym]] }
+    populator_to_errors_item = ->(twin, dfn, errors:, index:, ** ) { errors[index] }
+
     twin_schema = {
       recursion: :recurse_nested, populator: populator,
       twin: Disposable::Twin.build_for(:id, :total, :taxes, :memos, :ids_ids, :ids),
       to_hash_populator: populator_to_h,
       definitions: [
         {name: :id,    recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse, to_hash_populator: populator_scalar },
-        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { {twin: twin.total} }, to_hash_populator: populator_to_h,
+        {name: :total, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :currency), parse_populator: ->(dfn, fragment, twin:, **) { {twin: twin.total} }, to_hash_populator: populator_to_h, to_errors_populator: populator_to_errors,
           definitions: [
             {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse, to_hash_populator: populator_scalar },
             {name: :currency,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: populator_scalar_parse, to_hash_populator: populator_scalar },
           ]
         },
 
-        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: Populator::Collection, to_hash_populator: populator_scalar,
+        {name: :taxes, recursion: :recurse_collection, populator: populator, twin: Collection, parse_populator: Populator::Collection, to_hash_populator: populator_scalar, to_errors_populator: populator_to_errors,
           item_dfn: {
-            name: :bla, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: Populator::Collection::Item, to_hash_populator: populator_to_h,
+            name: :bla, recursion: :recurse_nested, populator: populator, twin: Disposable::Twin.build_for(:amount, :percent), parse_populator: Populator::Collection::Item, to_hash_populator: populator_to_h, to_errors_populator: populator_to_errors_item,
             definitions: [
               {name: :amount,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} }, to_hash_populator: populator_scalar },
               {name: :percent,  recursion: :recurse_scalar, populator: populator_scalar, parse_populator: ->(dfn, fragment, twin:, **) { {twin: fragment} }, to_hash_populator: populator_scalar },
@@ -336,11 +342,20 @@ puts "yayyyy"
       hash = Disposable::Schema::ToHash::Changed.run_scalar(_twin_schema, twin)  # FIXME.
 
       # pp schema.(hash).errors
-      schema.(hash).errors.must_equal(
+      errors = schema.(hash).errors
+
+      errors.must_equal(
         {:id=>["is missing"], :taxes=>{0=>{:percent=>["must be an integer"]}}}
       )
 
+      errors_twin_schema = _twin_schema.dup
+      errors_twin_schema[:definitions].shift
+      errors_twin_schema[:definitions][0][:definitions] = []
+      errors_twin_schema[:definitions][1][:item_dfn][:definitions] = []
+      pp errors_twin_schema
+
       # diese fehler müssen jetzt auf das Form überschreiben werden
+      hash = Disposable::Schema::ToErrors.recurse_nested(_twin_schema, twin, errors: errors)  # FIXME.errors
     end
   end
 

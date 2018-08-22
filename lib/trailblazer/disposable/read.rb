@@ -149,6 +149,74 @@ module Trailblazer
         end
       end
 
+      # grab dfn twin
+      # grab dfn errors from "form.errors"
+      # write errors to twin
+      #   recurse twin's defs
+
+      module ToErrors
+        extend Runtime
+
+        class << self
+          public :recurse_nested # FUCK Ruby
+
+          # def recurse_nested(dfn, (value, twin), **args)
+          #   res=run_definitions(dfn, [value, twin], **args) # FIXME with activity.
+          #   twin.errors = value
+          #   res
+          # end
+
+          # def run_binding(dfn, (source, parent_twin), **args) # this is an Activity in the end.
+          #   #value, stop = read(source, dfn, **args) # TODO: use Railway. # TODO: allow to always run populator.
+
+          #   (value, twin), stop = read([source, parent_twin], dfn, **args)
+          #   puts "  ??? #{dfn[:name]} {#{twin}"
+
+          #   return twin if stop
+          #   puts "@@@@@, #{value.inspect} ..... #{dfn[:name]} #{twin.class}"
+
+          #   value = run_scalar(dfn, [value, twin], **args)
+
+          #   # twin = write(value, dfn, **args)
+          #   [value, twin]
+          # end
+
+          def run_scalar(definition, value, *args)
+            # e.g. recurse_collection
+            value, *args = run_populator(definition, value, *args)
+
+            value = send(definition[:recursion], definition, value, *args) # NestedActivity.()
+          end
+
+
+          # # Read property from {Errors} object.
+          def read(*args)
+            ToHash.read(*args)
+          end
+
+          # def run_scalar(dfn, value, **args)
+          #   value = send(dfn[:recursion], dfn, value, **args)
+          #   value
+          # end
+
+          def run_populator(definition, hash, *args)
+            pp definition
+            # raise hash.inspect
+            definition[:to_errors_populator].(hash, definition, *args)
+          end
+
+          # value looks like {0=>{:percent=>["must be an integer"]}}
+          # def run_collection(definition, value, **args)
+          #   puts "::: #{value} "
+          #   value.each_w.collect do |i, item|
+          #   # raise item.inspect
+          #     run_scalar(definition, [item], args.merge(index: i)) # TODO: optimize {i}. TEST!!!!!!!!!
+          #   end
+          # end
+
+        end
+      end
+
 
       # binding
       #   read
