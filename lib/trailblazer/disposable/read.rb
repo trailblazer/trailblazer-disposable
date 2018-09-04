@@ -154,6 +154,8 @@ module Trailblazer
       # write errors to twin
       #   recurse twin's defs
 
+      # Go through twin, grab respective elements from {form.errors}
+      # write those to the twin
       module ToErrors
         extend Runtime
 
@@ -184,12 +186,14 @@ module Trailblazer
           def run_scalar(definition, value, *args)
             # e.g. recurse_collection
             value, *args = run_populator(definition, value, *args)
+            puts "return: #{value}
+ errors: #{args[0][:errors]}"
 
             value = send(definition[:recursion], definition, value, *args) # NestedActivity.()
           end
 
 
-          # # Read property from {Errors} object.
+          # # Read property from {Twin}.
           def read(*args)
             ToHash.read(*args)
           end
@@ -200,8 +204,7 @@ module Trailblazer
           # end
 
           def run_populator(definition, hash, *args)
-            pp definition
-            # raise hash.inspect
+            # Retrieve the property's errors fragment from the {Errors} object.
             definition[:to_errors_populator].(hash, definition, *args)
           end
 
@@ -213,7 +216,6 @@ module Trailblazer
           #     run_scalar(definition, [item], args.merge(index: i)) # TODO: optimize {i}. TEST!!!!!!!!!
           #   end
           # end
-
         end
       end
 

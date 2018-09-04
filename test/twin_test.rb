@@ -2,6 +2,9 @@ require "test_helper"
 
 class TwinTest < Minitest::Spec
   class Collection < Array
+
+        attr_accessor :errors # FIXME: move that to Twin::Form
+
     def initialize(*items)
         super(*items)
 
@@ -95,9 +98,17 @@ require "ostruct"
 
     # e.g. for {total}
     populator_to_errors = ->(twin, dfn, errors: ) {
-puts "@@@@@*#{dfn[:name]}=== #{twin.inspect}"
-      [twin, errors: errors[dfn[:name].to_sym]] }
-    populator_to_errors_item = ->(twin, dfn, errors:, index:, ** ) { errors[index] }
+puts "POP@@@@@*#{dfn[:name]}=== #{twin.inspect}"
+
+      twin.errors = errors[dfn[:name].to_sym] # FIXME: redundant!
+
+      [twin, errors: errors[dfn[:name].to_sym]]
+    }
+    populator_to_errors_item = ->(twin, dfn, errors:, index:, ** ) {
+      twin.errors = errors[index] # FIXME: redundant!
+
+      [twin, errors: errors[index]]
+    }
 
     twin_schema = {
       recursion: :recurse_nested, populator: populator,
@@ -356,6 +367,16 @@ puts "yayyyy"
 
       # diese fehler müssen jetzt auf das Form überschreiben werden
       hash = Disposable::Schema::ToErrors.recurse_nested(_twin_schema, twin, errors: errors)  # FIXME.errors
+
+      pp twin
+      twin.errors.must_equal []
+      twin.total.errors.must_equal
+
+
+      twin.taxes.errors.must_equal({0=>{:percent=>["must be an integer"]}})
+      twin.taxes[0].errors.must_equal({:percent=>["must be an integer"]})
+
+      hash.must_equal ""
     end
   end
 

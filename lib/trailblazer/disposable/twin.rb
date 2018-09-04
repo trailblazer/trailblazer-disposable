@@ -1,6 +1,8 @@
 module Trailblazer
   module Disposable
     class Twin
+      attr_accessor :errors # FIXME: move that to Twin::Form
+
       def self.build_for(*attributes)
         Class.new(Twin) do
           attributes.each { |name| create_accessors(name, {}) }
