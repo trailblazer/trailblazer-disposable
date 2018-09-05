@@ -84,6 +84,16 @@ require "ostruct"
       end
     end
 #
+  let(:populator_to_errors) {
+    populator_to_errors = ->(twin, dfn, errors: ) {
+puts "POP@@@@@*#{dfn[:name]}=== #{twin.inspect}"
+
+      twin.errors = errors[dfn[:name].to_sym] # FIXME: redundant!
+
+      [twin, errors: errors[dfn[:name].to_sym]]
+    }
+  }
+
   let(:twin_schema) do
 
 # TODO: move that into the Hydration library
@@ -97,13 +107,7 @@ require "ostruct"
     populator_scalar_parse = ->(dfn, value, twin) { {twin: value} }
 
     # e.g. for {total}
-    populator_to_errors = ->(twin, dfn, errors: ) {
-puts "POP@@@@@*#{dfn[:name]}=== #{twin.inspect}"
 
-      twin.errors = errors[dfn[:name].to_sym] # FIXME: redundant!
-
-      [twin, errors: errors[dfn[:name].to_sym]]
-    }
     populator_to_errors_item = ->(twin, dfn, errors:, index:, ** ) {
       twin.errors = errors[index] # FIXME: redundant!
 
@@ -366,17 +370,22 @@ puts "yayyyy"
       pp errors_twin_schema
 
       # diese fehler müssen jetzt auf das Form überschreiben werden
-      hash = Disposable::Schema::ToErrors.recurse_nested(_twin_schema, twin, errors: errors)  # FIXME.errors
+      hash = Disposable::Schema::ToErrors.run_scalar(
+        {name: :yo, definitions: errors_twin_schema[:definitions],
+        to_errors_populator: populator_to_errors,
+        recursion: :recurse_nested,
+      },
+        twin, errors: {yo: errors})  # FIXME.errors
 
       pp twin
-      twin.errors.must_equal []
-      twin.total.errors.must_equal
+      twin.errors.must_equal( {:id=>["is missing"], :taxes=>{0=>{:percent=>["must be an integer"]}}})
+      twin.total.errors.must_equal nil
 
 
       twin.taxes.errors.must_equal({0=>{:percent=>["must be an integer"]}})
       twin.taxes[0].errors.must_equal({:percent=>["must be an integer"]})
 
-      hash.must_equal ""
+      # hash.must_equal ""
     end
   end
 
