@@ -337,6 +337,7 @@ puts "yayyyy"
       document = {
         taxes: [
           { amount: 190, percent: 200.01 },
+          { amount: 10,  percent: 100 },
         ]
       }
 
@@ -384,6 +385,7 @@ puts "yayyyy"
 
       twin.taxes.errors.must_equal({0=>{:percent=>["must be an integer"]}})
       twin.taxes[0].errors.must_equal({:percent=>["must be an integer"]})
+      twin.taxes[1].errors.must_equal(nil)
 
       # hash.must_equal ""
     end
