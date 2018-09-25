@@ -1,5 +1,38 @@
 require "test_helper"
 
+=begin
+data: {
+  taxes: [],
+  auth: {
+    ...
+  }
+}
+
+Write.(Hash mutated, Hash original) returns
+  hash with all values, ready for update_attributes/Changeset ?
+
+
+
+
+property :taxes
+  read:  data/taxes
+  write: data: original_data.merge(taxes: [])
+
+  property :amount
+    read:  amount
+    write: amount: amount
+
+READ
+taxes :data/taxes
+
+WRITE
+option 1
+  data[:taxes] = []
+
+option 2 (immutable)
+  data: data.merge( taxes: [] )
+=end
+
 class DisposableTest < Minitest::Spec
   it do
 
@@ -14,6 +47,8 @@ class DisposableTest < Minitest::Spec
     class Expense
       # Define what you _want_ from the source object, and what the source looks like. (also, data types)
       class Source < Disposable::Twin
+
+        Types = Dry::Types.module
 
         property :id, type: Types::Strict::Int
         property :data do

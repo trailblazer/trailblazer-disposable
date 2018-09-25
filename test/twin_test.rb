@@ -245,6 +245,7 @@ puts "POP@@@@@*#{dfn[:name]}=== #{twin.inspect}"
 
       twin.id.must_equal "1.1"
       twin.total.amount.must_equal 100
+      twin.total.currency.must_equal "EUR"
 
       twin.taxes.size.must_equal 1
       twin.taxes[0].amount.must_equal 98
@@ -274,6 +275,11 @@ puts "POP@@@@@*#{dfn[:name]}=== #{twin.inspect}"
       twin.instance_variable_get(:@fields)[:taxes][0].amount.must_equal 99
 
       # TODO: twin.diff
+
+      # twin.to_changeset
+        # we know that {taxes} is empty now.
+      # => attributes: hash for update_attributes
+      # => associations: {taxes: []}
     end
 
     it "allows adding and removing items" do
