@@ -29,6 +29,7 @@ class ActivityTest < Minitest::Spec
 
           binding = __dfn[:binding] # Scalar::RunBinding[::Nested]
 
+          # Technically, we're creating a new Context here!
           signal, (_ctx, flow) = binding.( [{document: value, dfn: __dfn}] )
 
 
@@ -95,6 +96,7 @@ class ActivityTest < Minitest::Spec
       definitions:  [
         { name: :id,     binding: Scalar::RunBinding },
         { name: :uuid,   binding: Scalar::RunBinding },
+        { name: :role,   binding: Scalar::RunBinding },
         { name: :amount, binding: Scalar::RunBinding::Nested, definitions:
           [
             { name: :total,   binding: Scalar::RunBinding },
@@ -111,6 +113,90 @@ class ActivityTest < Minitest::Spec
 
     pp signal, ctx
 
-    ctx[:value].must_equal([:_top_, [[:id, 1], [:uuid, "0x11"], [:amount, [[:total, 9.99], nil]]]])
+    ctx[:value].must_equal([:_top_, [[:id, 1], [:uuid, "0x11"], nil, [:amount, [[:total, 9.99], nil]]]])
+  end
+
+  it "controlled deep merge" do
+
+    module Merge
+      module Scalar
+        extend Trailblazer::Activity::Railway()
+        module_function
+
+        def read_a_field(ctx, a:, dfn:, **) # TODO: merge with Scalar::read
+          return false unless a.key?(dfn[:name])
+
+          ctx[:value] = a[ dfn[:name] ]
+        end
+
+        def read_b_field(ctx, b:, dfn:, **) # TODO: merge with Scalar::read
+          return false unless b.key?(dfn[:name])
+
+          ctx[:value] = b[ dfn[:name] ]
+
+        end
+
+        def write_b(ctx, merged_a:, dfn:, value:, **)
+          ctx[:merged_a] = merged_a.merge(dfn[:name] => value)
+        end
+
+        step method(:read_a_field)
+        fail method(:read_b_field).clone,
+          Output(:success) => :write_b,
+          Output(:failure) => "End.failure"
+
+          step method(:write_b), magnetic_to: [], id: :write_b, Output(:success)=>"End.success", Output(:failure)=>"End.failure"
+
+        step method(:read_b_field)
+        fail method(:write_b).clone, id: :write_a # if no b, we want a
+        step method(:write_b).clone, id: :overwrite_a_with_b
+
+      end
+    end
+
+    pp Scalar.to_h[:circuit]
+
+    a = {
+      id: 1,
+      uuid: "0x11",
+      # uuid: nil,
+      amount: {
+        total: 9.99,
+      }.freeze,
+
+      rubbish: false,
+    }.freeze
+
+    b = {
+      id: 2,          # changed, but unsolicited (read-only)
+      role:   :admin, # new field
+      amount: {
+        currency: :EUR,
+      }.freeze
+    }.freeze
+
+    # a is the base, b gets merged into a
+    # but only a few fields, with "conditions"
+    # if no a or b field present, skip
+
+    definition = { name: :id,
+      #binding: Scalar::RunBinding
+    }
+
+     signal, (ctx, _) = Merge::Scalar.( [a: a, b: b, merged_a: {}, dfn: definition] )
+
+    pp signal, ctx
+    ctx[:merged_a].must_equal({:id=>2})
+
+
+    signal, (ctx, _) = Merge::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
+    ctx[:merged_a].must_equal({:id=>1})
+
+    signal, (ctx, _) = Merge::Scalar.( [a: {}, b: {}, merged_a: {}, dfn: definition] )
+    ctx[:merged_a].must_equal({})
+
+    signal, (ctx, _) = Merge::Scalar.( [a: {}, b: {id:3}, merged_a: {}, dfn: definition] )
+    ctx[:merged_a].must_equal({:id=>3})
+
   end
 end
