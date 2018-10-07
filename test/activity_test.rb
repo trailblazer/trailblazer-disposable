@@ -156,6 +156,21 @@ class ActivityTest < Minitest::Spec
 
     pp Scalar.to_h[:circuit]
 
+    module Expense
+      extend Trailblazer::Activity::Railway()
+      module_function
+
+      output = ->(ctx, **) { original, _ctx = ctx.decompose; o=original.merge(merged_a: _ctx[:merged_a]) }
+
+      # step method(:inject_merged_a)
+      step Subprocess(Merge::Scalar),
+        input: ->(ctx, **) { ctx.merge(dfn: {name: :id}) },
+        output: output
+      step Subprocess(Merge::Scalar.clone),
+        input: ->(ctx, **) { ctx.merge(dfn: {name: :uuid}) },
+        output: output
+    end
+
     a = {
       id: 1,
       uuid: "0x11",
@@ -183,10 +198,10 @@ class ActivityTest < Minitest::Spec
       #binding: Scalar::RunBinding
     }
 
-     signal, (ctx, _) = Merge::Scalar.( [a: a, b: b, merged_a: {}, dfn: definition] )
+     signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( Expense, [a: a, b: b, merged_a: {}, dfn: definition] )
 
     pp signal, ctx
-    ctx[:merged_a].must_equal({:id=>2})
+    ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11"})
 
 
     signal, (ctx, _) = Merge::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
