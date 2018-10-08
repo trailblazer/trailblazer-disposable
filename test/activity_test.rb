@@ -118,12 +118,29 @@ class ActivityTest < Minitest::Spec
 
   it "controlled deep merge" do
 
+    module Step
+      def step(task, options)
+        options = options.dup
+        input, output = options.delete(:input), options.delete(:output)
+
+        if input
+          options = options.merge(Trailblazer::Activity::TaskWrap::VariableMapping.extension_for(
+
+            Trailblazer::Activity::TaskWrap::Input.new(input),
+            Trailblazer::Activity::TaskWrap::Output.new(output)) => true)
+        end
+
+        super(task, options)
+      end
+    end
+
     module Merge
       module Scalar
         extend Trailblazer::Activity::Railway()
         module_function
 
         def read_a_field(ctx, a:, dfn:, **) # TODO: merge with Scalar::read
+          puts "reading #{dfn[:name]}"
           return false unless a.key?(dfn[:name])
 
           ctx[:value] = a[ dfn[:name] ]
@@ -140,17 +157,35 @@ class ActivityTest < Minitest::Spec
           ctx[:merged_a] = merged_a.merge(dfn[:name] => value)
         end
 
-        step method(:read_a_field)
+        step method(:read_a_field), id: :read_a_field
         fail method(:read_b_field).clone,
+          id: :read_b_field_1,
           Output(:success) => :write_b,
           Output(:failure) => "End.failure"
 
           step method(:write_b), magnetic_to: [], id: :write_b, Output(:success)=>"End.success", Output(:failure)=>"End.failure"
 
-        step method(:read_b_field)
+        step method(:read_b_field), id: :read_b_field_2
         fail method(:write_b).clone, id: :write_a # if no b, we want a
         step method(:write_b).clone, id: :overwrite_a_with_b
+      end
 
+      module Nested
+        extend Trailblazer::Activity::Railway()
+        module_function
+
+        extend Scalar
+
+        # extend Step
+
+        merge!(Scalar)
+        step method(:read_a_field).clone, replace: :read_a_field, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(a: value) }
+        # step method(:read_b_field).clone, replace: :read_b_field_1, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(b: value) }
+        step method(:read_b_field).clone, replace: :read_b_field_2, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(b: value) }, id: :read_b_field_2
+
+        step :nil, after: :read_b_field_2, id: :process_nested, # nest
+          Output(:failure) => Track(:success) # FIXME: why?
+        # step ->(ctx, **) { raise ctx.inspect }, after: :process_nested # nest
       end
     end
 
@@ -160,15 +195,108 @@ class ActivityTest < Minitest::Spec
       extend Trailblazer::Activity::Railway()
       module_function
 
-      output = ->(ctx, **) { original, _ctx = ctx.decompose; o=original.merge(merged_a: _ctx[:merged_a]) }
+      OUTPUT = ->(original, ctx, **) {
+        puts "@@@@@ #{ctx.object_id.inspect} |#{ctx[:dfn][:name]}| "
+
+        outer, inner = ctx.decompose
+        # puts "@@@@@ #{original.object_id}... #{mutated.object_id} ??? #{original.inspect}"
+        # o=original.merge(merged_a: mutated[:merged_a])
+
+        outer[:merged_a] = inner[:merged_a] # DISCUSS: can we do this by "not" mutating?
+
+
+        outer
+      }
+
+      def input(name)
+        ->(ctx, **) {
+          puts "@@@@@ #{ctx.object_id} #{name.upcase}/in  "
+          _ctx = Trailblazer::Context(ctx, dfn: {name: name}) # DISCUSS: this mixes the "new local state" with the old state in {mutable}
+          puts "@@@@@ #{_ctx.object_id} #{name.upcase}/in/ "
+          _ctx
+        }
+      end
+
+      def output(name)
+        ->(original, ctx, **) {
+          puts "@@@@@ #{ctx.object_id} #{name.upcase}/out  "
+
+          outer, inner = ctx.decompose
+        # puts "@@@@@ #{original.object_id}... #{mutated.object_id} ??? #{original.inspect}"
+        # o=original.merge(merged_a: mutated[:merged_a])
+          puts "@@@@@ #{outer.object_id} #{name.upcase}/out/ "
+
+          puts inner.inspect
+
+          outer[:merged_a] = inner[:merged_a] # DISCUSS: can we do this by "not" mutating?
+          outer
+        }
+      end
+
+      module Amount
+        extend Trailblazer::Activity::Railway()
+        module_function
+
+        extend Step
+
+        step Subprocess(Merge::Scalar),
+          input: ->(ctx, **) { ctx.merge(dfn: {name: :total}) },
+          output: OUTPUT
+        step Subprocess(Merge::Scalar.clone),
+          input: ->(ctx, **) { ctx.merge(dfn: {name: :currency}) },
+          output: OUTPUT
+      end
+
+      module NestedAmount
+        extend Trailblazer::Activity::Railway()
+        module_function
+
+        # extend Step
+
+        merge!(Merge::Nested)
+        step Subprocess(Amount), replace: :process_nested,Output(:failure) => Track(:success), # FIXME: why?
+          input: ->(ctx, **) {
+            puts "@@@@@  reinxx #{ctx.object_id} #{ctx.class}"
+            c=ctx.merge(merged_a: {}.freeze, value: "i shouldn't be here")
+
+            puts "@@@@@ rein #{c.object_id}"
+
+            c
+          },
+          output: ->(ctx, **) {
+            puts "@@@@@ raus #{ctx.object_id}"
+
+            original, _ctx = ctx.decompose
+
+            puts "@@@@@ #{original.object_id}"
+            # raise _ctx.inspect
+            pp _ctx
+puts "yo"
+            pp original
+
+# raise original[:merged_a].inspect
+            original[:merged_a] = _ctx[:merged_a]; original }
+      end
+
+      extend Step
 
       # step method(:inject_merged_a)
-      step Subprocess(Merge::Scalar),
-        input: ->(ctx, **) { ctx.merge(dfn: {name: :id}) },
-        output: output
+      # step Subprocess(Merge::Scalar),
       step Subprocess(Merge::Scalar.clone),
-        input: ->(ctx, **) { ctx.merge(dfn: {name: :uuid}) },
-        output: output
+        input:  Expense.input(:id),
+        output: Expense.output(:id)
+
+      step Subprocess(Merge::Scalar.clone),
+        input:  Expense.input(:uuid),
+        output: Expense.output(:uuid),
+        Output(:failure)=>Track(:success) # FIXME: why?
+
+#       step Subprocess(NestedAmount),
+#         input: ->(ctx, **) { c=ctx.merge(dfn: {name: :amount})
+# puts "@@@@@ reinX #{c.object_id} #{ctx.class}"
+#         c
+#          },
+#         output: Expense.output(:amount) # FIXME: should be AMOUNT
     end
 
     a = {
@@ -198,7 +326,11 @@ class ActivityTest < Minitest::Spec
       #binding: Scalar::RunBinding
     }
 
-     signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( Expense, [a: a, b: b, merged_a: {}, dfn: definition] )
+    ctx = Trailblazer::Context(a: a, b: b, merged_a: {})
+
+puts "@@@@@ anfang #{ctx.object_id}"
+
+     signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( Expense, [ctx] )
 
     pp signal, ctx
     ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11"})
