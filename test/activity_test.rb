@@ -176,12 +176,18 @@ class ActivityTest < Minitest::Spec
 
         extend Scalar
 
-        # extend Step
+        extend Step
 
         merge!(Scalar)
-        step method(:read_a_field).clone, replace: :read_a_field, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(a: value) }
+
+        step method(:read_a_field).clone, replace: :read_a_field,
+          input:  ->(ctx, **) { ctx },
+          output: ->(original, ctx, **) { ctx[:a] = ctx[:value]; ctx }
+
         # step method(:read_b_field).clone, replace: :read_b_field_1, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(b: value) }
-        step method(:read_b_field).clone, replace: :read_b_field_2, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(b: value) }, id: :read_b_field_2
+        step method(:read_b_field).clone, replace: :read_b_field_2,
+          input:  ->(ctx, **) { ctx },
+          output: ->(original, ctx, **) { ctx[:b] = ctx[:value]; ctx }, id: :read_b_field_2
 
         step :nil, after: :read_b_field_2, id: :process_nested, # nest
           Output(:failure) => Track(:success) # FIXME: why?
@@ -194,19 +200,6 @@ class ActivityTest < Minitest::Spec
     module Expense
       extend Trailblazer::Activity::Railway()
       module_function
-
-      OUTPUT = ->(original, ctx, **) {
-        puts "@@@@@ #{ctx.object_id.inspect} |#{ctx[:dfn][:name]}| "
-
-        outer, inner = ctx.decompose
-        # puts "@@@@@ #{original.object_id}... #{mutated.object_id} ??? #{original.inspect}"
-        # o=original.merge(merged_a: mutated[:merged_a])
-
-        outer[:merged_a] = inner[:merged_a] # DISCUSS: can we do this by "not" mutating?
-
-
-        outer
-      }
 
       def input(name)
         ->(ctx, **) {
@@ -240,42 +233,51 @@ class ActivityTest < Minitest::Spec
         extend Step
 
         step Subprocess(Merge::Scalar),
-          input: ->(ctx, **) { ctx.merge(dfn: {name: :total}) },
-          output: OUTPUT
+          input:  Expense.input(:total),
+          output: Expense.output(:total)
         step Subprocess(Merge::Scalar.clone),
-          input: ->(ctx, **) { ctx.merge(dfn: {name: :currency}) },
-          output: OUTPUT
+          input:  Expense.input(:currency),
+          output: Expense.output(:currency)
       end
 
       module NestedAmount
         extend Trailblazer::Activity::Railway()
         module_function
 
-        # extend Step
+        extend Step
 
         merge!(Merge::Nested)
+
         step Subprocess(Amount), replace: :process_nested,Output(:failure) => Track(:success), # FIXME: why?
           input: ->(ctx, **) {
+
+
             puts "@@@@@  reinxx #{ctx.object_id} #{ctx.class}"
-            c=ctx.merge(merged_a: {}.freeze, value: "i shouldn't be here")
 
-            puts "@@@@@ rein #{c.object_id}"
 
-            c
+            new_ctx = Trailblazer::Context(ctx, merged_a: {})
+            # raise new_ctx.inspect
+            # ctx[:merged_a] = {}
+
+
+            # raise ctx.inspect
+            # c=ctx.merge(merged_a: {}.freeze, value: "i shouldn't be here")
+
+            # puts "@@@@@ rein #{c.object_id}"
+
+            new_ctx
           },
-          output: ->(ctx, **) {
+          output: ->(original, ctx, **) {
+
             puts "@@@@@ raus #{ctx.object_id}"
 
             original, _ctx = ctx.decompose
 
-            puts "@@@@@ #{original.object_id}"
-            # raise _ctx.inspect
-            pp _ctx
-puts "yo"
-            pp original
 
-# raise original[:merged_a].inspect
-            original[:merged_a] = _ctx[:merged_a]; original }
+            original[:value] = _ctx[:merged_a]
+            original
+
+          }
       end
 
       extend Step
@@ -291,12 +293,9 @@ puts "yo"
         output: Expense.output(:uuid),
         Output(:failure)=>Track(:success) # FIXME: why?
 
-#       step Subprocess(NestedAmount),
-#         input: ->(ctx, **) { c=ctx.merge(dfn: {name: :amount})
-# puts "@@@@@ reinX #{c.object_id} #{ctx.class}"
-#         c
-#          },
-#         output: Expense.output(:amount) # FIXME: should be AMOUNT
+      step Subprocess(NestedAmount),
+        input:  Expense.input(:amount),
+        output: Expense.output(:amount) # FIXME: should be AMOUNT
     end
 
     a = {
@@ -305,6 +304,7 @@ puts "yo"
       # uuid: nil,
       amount: {
         total: 9.99,
+        currency: :USD, # TODO: remove one field here and have it in b.
       }.freeze,
 
       rubbish: false,
@@ -315,6 +315,8 @@ puts "yo"
       role:   :admin, # new field
       amount: {
         currency: :EUR,
+        total: 99.9,
+        bogus: true,
       }.freeze
     }.freeze
 
@@ -333,7 +335,7 @@ puts "@@@@@ anfang #{ctx.object_id}"
      signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( Expense, [ctx] )
 
     pp signal, ctx
-    ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11"})
+    ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>99.9, :currency=>:EUR}})
 
 
     signal, (ctx, _) = Merge::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
