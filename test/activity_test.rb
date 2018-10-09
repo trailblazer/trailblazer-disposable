@@ -328,16 +328,18 @@ class ActivityTest < Minitest::Spec
       #binding: Scalar::RunBinding
     }
 
-    ctx = Trailblazer::Context(a: a, b: b, merged_a: {})
+    ctx = Trailblazer::Context(a: a, b: b)
     old_ctx = ctx
+
+    expense = Expense::Container(Expense)
 
 puts "@@@@@ anfang #{ctx.object_id}"
 
-     signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( Expense, [ctx] )
+     signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( expense, [ctx] )
 
 puts "@@@@@ fertig #{ctx.object_id}"
     pp signal, ctx
-    ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>99.9, :currency=>:EUR}})
+    ctx[:value].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>99.9, :currency=>:EUR}})
     ctx.object_id.must_equal old_ctx.object_id
 
 
