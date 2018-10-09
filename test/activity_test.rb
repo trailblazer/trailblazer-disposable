@@ -329,6 +329,7 @@ class ActivityTest < Minitest::Spec
     }
 
     ctx = Trailblazer::Context(a: a, b: b, merged_a: {})
+    old_ctx = ctx
 
 puts "@@@@@ anfang #{ctx.object_id}"
 
@@ -337,6 +338,7 @@ puts "@@@@@ anfang #{ctx.object_id}"
 puts "@@@@@ fertig #{ctx.object_id}"
     pp signal, ctx
     ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>99.9, :currency=>:EUR}})
+    ctx.object_id.must_equal old_ctx.object_id
 
 
     signal, (ctx, _) = Merge::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
