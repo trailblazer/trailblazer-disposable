@@ -240,44 +240,44 @@ class ActivityTest < Minitest::Spec
           output: Expense.output(:currency)
       end
 
+      # this "container" adds a private/local {:merged_a} and writes it to {:value} after.
+      def Container(activity)
+        Module.new do
+          extend Trailblazer::Activity::Railway()
+          module_function
+
+          extend Step
+
+          step Subprocess(activity),
+            input: ->(ctx, **) {
+              new_ctx = Trailblazer::Context(ctx, merged_a: {})
+              new_ctx
+            },
+            output: ->(original, ctx, **) {
+              original, _ctx = ctx.decompose
+
+              original[:value] = _ctx[:merged_a]
+              original
+            }
+        end
+      end
+
+      NestedAmount2 = Container(Amount)
+
       module NestedAmount
         extend Trailblazer::Activity::Railway()
         module_function
 
         extend Step
 
+
+        # we want the same mechanics here for reading from a and b, if/else, etc.
+        # different to scalar: after successfully reading, we go into {process_nested}.
+        # this "container" adds a private/local {merged_a}
         merge!(Merge::Nested)
 
-        step Subprocess(Amount), replace: :process_nested,Output(:failure) => Track(:success), # FIXME: why?
-          input: ->(ctx, **) {
+        step Subprocess(NestedAmount2), replace: :process_nested,Output(:failure) => Track(:success) # FIXME: why?
 
-
-            puts "@@@@@  reinxx #{ctx.object_id} #{ctx.class}"
-
-
-            new_ctx = Trailblazer::Context(ctx, merged_a: {})
-            # raise new_ctx.inspect
-            # ctx[:merged_a] = {}
-
-
-            # raise ctx.inspect
-            # c=ctx.merge(merged_a: {}.freeze, value: "i shouldn't be here")
-
-            # puts "@@@@@ rein #{c.object_id}"
-
-            new_ctx
-          },
-          output: ->(original, ctx, **) {
-
-            puts "@@@@@ raus #{ctx.object_id}"
-
-            original, _ctx = ctx.decompose
-
-
-            original[:value] = _ctx[:merged_a]
-            original
-
-          }
       end
 
       extend Step
@@ -334,6 +334,7 @@ puts "@@@@@ anfang #{ctx.object_id}"
 
      signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( Expense, [ctx] )
 
+puts "@@@@@ fertig #{ctx.object_id}"
     pp signal, ctx
     ctx[:merged_a].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>99.9, :currency=>:EUR}})
 
@@ -346,6 +347,13 @@ puts "@@@@@ anfang #{ctx.object_id}"
 
     signal, (ctx, _) = Merge::Scalar.( [a: {}, b: {id:3}, merged_a: {}, dfn: definition] )
     ctx[:merged_a].must_equal({:id=>3})
+
+
+    # test
+    # a-amount-{total}
+    # b-amount-{currency}
+    # nur b-amount
+    # b-amount in a reinmergen
 
   end
 end
