@@ -116,7 +116,6 @@ class ActivityTest < Minitest::Spec
     ctx[:value].must_equal([:_top_, [[:id, 1], [:uuid, "0x11"], nil, [:amount, [[:total, 9.99], nil]]]])
   end
 
-  it "controlled deep merge" do
 
     module Step
       def step(task, options)
@@ -140,20 +139,21 @@ class ActivityTest < Minitest::Spec
         module_function
 
         def read_a_field(ctx, a:, dfn:, **) # TODO: merge with Scalar::read
-          puts "reading #{dfn[:name]}"
+          puts "reading a #{dfn[:name]} #{a.inspect}"
           return false unless a.key?(dfn[:name])
 
           ctx[:value] = a[ dfn[:name] ]
         end
 
         def read_b_field(ctx, b:, dfn:, **) # TODO: merge with Scalar::read
+          puts "-- reading #{b} #{dfn}"
           return false unless b.key?(dfn[:name])
 
           ctx[:value] = b[ dfn[:name] ]
-
         end
 
         def write_b(ctx, merged_a:, dfn:, value:, **)
+          puts "write b: #{value}"
           ctx[:merged_a] = merged_a.merge(dfn[:name] => value)
         end
 
@@ -169,6 +169,9 @@ class ActivityTest < Minitest::Spec
         fail method(:write_b).clone, id: :write_a # if no b, we want a
         step method(:write_b).clone, id: :overwrite_a_with_b
       end
+
+      # pp Scalar.to_h[:circuit]
+      # raise
 
       module Nested
         extend Trailblazer::Activity::Railway()
@@ -192,10 +195,34 @@ class ActivityTest < Minitest::Spec
         step :nil, after: :read_b_field_2, id: :process_nested, # nest
           Output(:failure) => Track(:success) # FIXME: why?
         # step ->(ctx, **) { raise ctx.inspect }, after: :process_nested # nest
+
       end
     end
 
     pp Scalar.to_h[:circuit]
+
+
+    # this "container" adds a private/local {:merged_a} and writes it to {:value} after.
+    def self.Container(activity)
+      Module.new do
+        extend Trailblazer::Activity::Railway()
+        module_function
+
+        extend Step
+
+        step Subprocess(activity),
+          input: ->(ctx, **) {
+            new_ctx = Trailblazer::Context(ctx, merged_a: {})
+            new_ctx
+          },
+          output: ->(original, ctx, **) {
+            original, _ctx = ctx.decompose
+
+            original[:value] = _ctx[:merged_a]
+            original
+          }
+      end
+    end
 
     module Expense
       extend Trailblazer::Activity::Railway()
@@ -240,36 +267,12 @@ class ActivityTest < Minitest::Spec
           output: Expense.output(:currency)
       end
 
-      # this "container" adds a private/local {:merged_a} and writes it to {:value} after.
-      def Container(activity)
-        Module.new do
-          extend Trailblazer::Activity::Railway()
-          module_function
 
-          extend Step
-
-          step Subprocess(activity),
-            input: ->(ctx, **) {
-              new_ctx = Trailblazer::Context(ctx, merged_a: {})
-              new_ctx
-            },
-            output: ->(original, ctx, **) {
-              original, _ctx = ctx.decompose
-
-              original[:value] = _ctx[:merged_a]
-              original
-            }
-        end
-      end
-
-      NestedAmount2 = Container(Amount)
+      NestedAmount2 = ActivityTest::Container(Amount)
 
       module NestedAmount
         extend Trailblazer::Activity::Railway()
         module_function
-
-        extend Step
-
 
         # we want the same mechanics here for reading from a and b, if/else, etc.
         # different to scalar: after successfully reading, we go into {process_nested}.
@@ -298,6 +301,20 @@ class ActivityTest < Minitest::Spec
         output: Expense.output(:amount) # FIXME: should be AMOUNT
     end
 
+    def invoke(activity, a, b, **options)
+      # ctx = Trailblazer::Context({a: a, b: b}.merge(options))
+      ctx = Trailblazer::Context({a: a, b: b})
+
+      ctx = Trailblazer::Context(ctx, options) if options.any?
+
+      old_ctx = ctx
+
+       signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke(activity, [ctx])
+
+       return ctx, old_ctx, signal
+    end
+
+  it "controlled deep merge" do
     a = {
       id: 1,
       uuid: "0x11",
@@ -328,20 +345,102 @@ class ActivityTest < Minitest::Spec
       #binding: Scalar::RunBinding
     }
 
-    ctx = Trailblazer::Context(a: a, b: b)
-    old_ctx = ctx
+    expense = ActivityTest::Container(Expense)
 
-    expense = Expense::Container(Expense)
 
-puts "@@@@@ anfang #{ctx.object_id}"
-
-     signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke( expense, [ctx] )
-
-puts "@@@@@ fertig #{ctx.object_id}"
-    pp signal, ctx
+    ctx, old_ctx = invoke(expense, a, b)
+    # pp signal, ctx
     ctx[:value].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>99.9, :currency=>:EUR}})
     ctx.object_id.must_equal old_ctx.object_id
 
+    # {total} missing in {b}
+    ctx, old_ctx = invoke(expense, a, {
+      id: 2,          # changed, but unsolicited (read-only)
+      role:   :admin, # new field
+      amount: {
+        currency: :EUR,
+        # total: 99.9,
+      }.freeze
+    }.freeze)
+
+    # pp signal, ctx
+    ctx[:value].must_equal({:id=>2, :uuid=>"0x11", :amount=>{:total=>9.99, :currency=>:EUR}})
+
+  end
+
+  it Merge::Nested do
+    a = {
+      amount: {
+        total: 9.99,
+        currency: :USD,
+      }.freeze,
+
+      rubbish: false,
+    }.freeze
+
+    b = {
+      amount: {
+        currency: :EUR,
+        total: 99.9,
+        bogus: true,
+      }.freeze
+    }.freeze
+
+    ctx, old_ctx, signal = invoke(Expense::NestedAmount, a, b, dfn: {name: :amount}, merged_a: {})
+    ctx[:value].must_equal({:total=>99.9, :currency=>:EUR})
+    signal.inspect.must_equal %{#<Trailblazer::Activity::End semantic=:success>}
+
+
+    ctx, old_ctx, signal = invoke(Expense::NestedAmount, a, {amount: {total: 99.9}}, dfn: {name: :amount}, merged_a: {})
+    ctx[:value].must_equal({:total=>99.9, :currency=>:USD})
+    signal.inspect.must_equal %{#<Trailblazer::Activity::End semantic=:success>}
+
+    ctx, old_ctx, signal = invoke(Expense::NestedAmount, {amount: {}}, {amount: {total: 99.9, currency: :EUR}}, dfn: {name: :amount}, merged_a: {})
+    ctx[:value].must_equal({:total=>99.9, :currency=>:EUR})
+    signal.inspect.must_equal %{#<Trailblazer::Activity::End semantic=:success>}
+
+    ctx, old_ctx, signal = invoke(Expense::NestedAmount,
+      {amount: {currency: :USD}},
+      {amount: {total: 99.9}},
+      dfn: {name: :amount}, merged_a: {})
+    ctx[:value].must_equal({:total=>99.9, :currency=>:USD})
+    signal.inspect.must_equal %{#<Trailblazer::Activity::End semantic=:success>}
+
+puts "+++++++++"
+    ctx, old_ctx, signal = invoke(Expense::NestedAmount,
+      {amount: {currency: :USD, total: 9.9}},
+      {amount: {currency: :EUR}},
+      dfn: {name: :amount}, merged_a: {})
+    signal.inspect.must_equal %{#<Trailblazer::Activity::End semantic=:success>}
+    ctx[:value].must_equal({:total=>99.9, :currency=>:USD})
+  end
+
+  it Merge::Scalar do
+    definition = { name: :id,
+      #binding: Scalar::RunBinding
+    }
+
+    a = {
+      id: 1,
+      uuid: "0x11",
+      # uuid: nil,
+      amount: {
+        total: 9.99,
+        currency: :USD, # TODO: remove one field here and have it in b.
+      }.freeze,
+
+      rubbish: false,
+    }.freeze
+
+    b = {
+      id: 2,          # changed, but unsolicited (read-only)
+      role:   :admin, # new field
+      amount: {
+        currency: :EUR,
+        total: 99.9,
+        bogus: true,
+      }.freeze
+    }.freeze
 
     signal, (ctx, _) = Merge::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
     ctx[:merged_a].must_equal({:id=>1})
