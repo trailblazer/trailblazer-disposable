@@ -261,7 +261,8 @@ class ActivityTest < Minitest::Spec
 
         step Subprocess(Merge::Scalar),
           input:  Expense.input(:total),
-          output: Expense.output(:total)
+          output: Expense.output(:total),
+          Output(:failure) => Track(:success)
         step Subprocess(Merge::Scalar.clone),
           input:  Expense.input(:currency),
           output: Expense.output(:currency)
@@ -412,7 +413,7 @@ puts "+++++++++"
       {amount: {currency: :EUR}},
       dfn: {name: :amount}, merged_a: {})
     signal.inspect.must_equal %{#<Trailblazer::Activity::End semantic=:success>}
-    ctx[:value].must_equal({:total=>99.9, :currency=>:USD})
+    ctx[:value].must_equal({:total=>9.9, :currency=>:EUR})
   end
 
   it Merge::Scalar do
