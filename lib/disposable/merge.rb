@@ -38,11 +38,6 @@ module Disposable
         @context.Output(:failure)=>@context.Track(:success) # FIXME: why?
 
           # generic
-
-          return
-          dfn = definition_for(*args, &block)
-
-          @definitions = @definitions + [dfn]
         end
 
         def call(&block)
