@@ -2,7 +2,11 @@ require "test_helper"
 
 require "trailblazer-activity"
 
+require "disposable/merge"
+
 class ActivityTest < Minitest::Spec
+  Merge = Disposable::Merge
+
   module Scalar
     extend Trailblazer::Activity::Railway()
     module_function
@@ -117,105 +121,22 @@ class ActivityTest < Minitest::Spec
   end
 
 
-    module Step
-      def step(task, options)
-        options = options.dup
-        input, output = options.delete(:input), options.delete(:output)
-
-        if input
-          options = options.merge(Trailblazer::Activity::TaskWrap::VariableMapping.extension_for(
-
-            Trailblazer::Activity::TaskWrap::Input.new(input),
-            Trailblazer::Activity::TaskWrap::Output.new(output)) => true)
-        end
-
-        super(task, options)
-      end
-    end
-
-    module Merge
-      module Scalar
-        extend Trailblazer::Activity::Railway()
-        module_function
-
-        def read_a_field(ctx, a:, dfn:, **) # TODO: merge with Scalar::read
-          puts "reading a #{dfn[:name]} #{a.inspect}"
-          return false unless a.key?(dfn[:name])
-
-          ctx[:value] = a[ dfn[:name] ]
-        end
-
-        def read_b_field(ctx, b:, dfn:, **) # TODO: merge with Scalar::read
-          puts "-- reading #{b} #{dfn}"
-          return false unless b.key?(dfn[:name])
-
-          ctx[:value] = b[ dfn[:name] ]
-        end
-
-        def write_b(ctx, merged_a:, dfn:, value:, **)
-          puts "write b: #{value}"
-          ctx[:merged_a] = merged_a.merge(dfn[:name] => value)
-        end
-
-        step method(:read_a_field), id: :read_a_field
-        fail method(:read_b_field).clone,
-          id: :read_b_field_1,
-          Output(:success) => :write_b,
-          Output(:failure) => "End.failure"
-
-          step method(:write_b), magnetic_to: [], id: :write_b, Output(:success)=>"End.success", Output(:failure)=>"End.failure"
-
-        step method(:read_b_field), id: :read_b_field_2
-        fail method(:write_b).clone, id: :write_a # if no b, we want a
-        step method(:write_b).clone, id: :overwrite_a_with_b
-      end
-
-      # pp Scalar.to_h[:circuit]
-      # raise
-
-      module Nested
-        extend Trailblazer::Activity::Railway()
-        module_function
-
-        extend Scalar
-
-        extend Step
-
-        merge!(Scalar)
-
-        step method(:read_a_field).clone, replace: :read_a_field,
-          input:  ->(ctx, **) { ctx },
-          output: ->(original, ctx, **) { ctx[:a] = ctx[:value]; ctx }
-
-        # step method(:read_b_field).clone, replace: :read_b_field_1, input: ->(ctx, **) { ctx }, output: ->(ctx, value:, **) { ctx.merge(b: value) }
-        step method(:read_b_field).clone, replace: :read_b_field_2,
-          input:  ->(ctx, **) { ctx },
-          output: ->(original, ctx, **) { ctx[:b] = ctx[:value]; ctx }, id: :read_b_field_2
-
-        step :nil, after: :read_b_field_2, id: :process_nested, # nest
-          Output(:failure) => Track(:success) # FIXME: why?
-        # step ->(ctx, **) { raise ctx.inspect }, after: :process_nested # nest
-
-      end
-    end
-
-    pp Scalar.to_h[:circuit]
-
-
     # this "container" adds a private/local {:merged_a} and writes it to {:value} after.
     def self.Container(activity)
       Module.new do
         extend Trailblazer::Activity::Railway()
         module_function
 
-        extend Step
+        extend Merge::Property::Step
 
         step Subprocess(activity),
           input: ->(ctx, **) {
             new_ctx = Trailblazer::Context(ctx, merged_a: {})
+            puts "&&& /1 Container #{new_ctx.object_id}"
             new_ctx
           },
           output: ->(original, ctx, **) {
+            puts "&&& \\1 Container #{ctx.object_id}"
             original, _ctx = ctx.decompose
 
             original[:value] = _ctx[:merged_a]
@@ -228,78 +149,54 @@ class ActivityTest < Minitest::Spec
       extend Trailblazer::Activity::Railway()
       module_function
 
-      def input(name)
-        ->(ctx, **) {
-          puts "@@@@@ #{ctx.object_id} #{name.upcase}/in  "
-          _ctx = Trailblazer::Context(ctx, dfn: {name: name}) # DISCUSS: this mixes the "new local state" with the old state in {mutable}
-          puts "@@@@@ #{_ctx.object_id} #{name.upcase}/in/ "
-          _ctx
-        }
-      end
 
-      def output(name)
-        ->(original, ctx, **) {
-          puts "@@@@@ #{ctx.object_id} #{name.upcase}/out  "
-
-          outer, inner = ctx.decompose
-        # puts "@@@@@ #{original.object_id}... #{mutated.object_id} ??? #{original.inspect}"
-        # o=original.merge(merged_a: mutated[:merged_a])
-          puts "@@@@@ #{outer.object_id} #{name.upcase}/out/ "
-
-          puts inner.inspect
-
-          outer[:merged_a] = inner[:merged_a] # DISCUSS: can we do this by "not" mutating?
-          outer
-        }
-      end
 
       module Amount
         extend Trailblazer::Activity::Railway()
         module_function
 
-        extend Step
+        extend Merge::Property::Step
 
-        step Subprocess(Merge::Scalar),
-          input:  Expense.input(:total),
-          output: Expense.output(:total),
+        step Subprocess(Merge::Property::Scalar),
+          input:  Merge::Property.input(:total),
+          output: Merge::Property.output(:total),
           Output(:failure) => Track(:success)
-        step Subprocess(Merge::Scalar.clone),
-          input:  Expense.input(:currency),
-          output: Expense.output(:currency)
+        step Subprocess(Merge::Property::Scalar.clone),
+          input:  Merge::Property.input(:currency),
+          output: Merge::Property.output(:currency)
       end
 
 
-      NestedAmount2 = ActivityTest::Container(Amount)
+      ContaineredAmount = ActivityTest::Container(Amount)
 
-      module NestedAmount
+      module NestedAmount # @isa Merge::Property::Nested -> Merge::Property::Scalar
         extend Trailblazer::Activity::Railway()
         module_function
 
         # we want the same mechanics here for reading from a and b, if/else, etc.
         # different to scalar: after successfully reading, we go into {process_nested}.
         # this "container" adds a private/local {merged_a}
-        merge!(Merge::Nested)
+        merge!(Merge::Property::Nested)
 
-        step Subprocess(NestedAmount2), replace: :process_nested,Output(:failure) => Track(:success) # FIXME: why?
-
+        step Subprocess(ContaineredAmount), replace: :process_nested,Output(:failure) => Track(:success) # FIXME: why?
       end
 
-      extend Step
+      extend Merge::Property::Step
 
       # step method(:inject_merged_a)
-      # step Subprocess(Merge::Scalar),
-      step Subprocess(Merge::Scalar.clone),
-        input:  Expense.input(:id),
-        output: Expense.output(:id)
+      # step Subprocess(Merge::Property::Scalar),
+      step Subprocess(Merge::Property::Scalar.clone),
+        input:  Merge::Property.input(:id),
+        output: Merge::Property.output(:id)
 
-      step Subprocess(Merge::Scalar.clone),
-        input:  Expense.input(:uuid),
-        output: Expense.output(:uuid),
+      step Subprocess(Merge::Property::Scalar.clone),
+        input:  Merge::Property.input(:uuid),
+        output: Merge::Property.output(:uuid),
         Output(:failure)=>Track(:success) # FIXME: why?
 
       step Subprocess(NestedAmount),
-        input:  Expense.input(:amount),
-        output: Expense.output(:amount) # FIXME: should be AMOUNT
+        input:  Merge::Property.input(:amount),
+        output: Merge::Property.output(:amount) # FIXME: should be AMOUNT
     end
 
     def invoke(activity, a, b, **options)
@@ -310,7 +207,10 @@ class ActivityTest < Minitest::Spec
 
       old_ctx = ctx
 
-       signal, (ctx, _) = Trailblazer::Activity::TaskWrap.invoke(activity, [ctx])
+       stack, signal, (ctx, _) = Trailblazer::Activity::Trace.invoke(activity, [ctx, {}])
+
+       output = Trailblazer::Activity::Trace::Present.(stack)
+       puts output
 
        return ctx, old_ctx, signal
     end
@@ -369,7 +269,7 @@ class ActivityTest < Minitest::Spec
 
   end
 
-  it Merge::Nested do
+  it Merge::Property::Nested do
     a = {
       amount: {
         total: 9.99,
@@ -416,7 +316,7 @@ puts "+++++++++"
     ctx[:value].must_equal({:total=>9.9, :currency=>:EUR})
   end
 
-  it Merge::Scalar do
+  it Merge::Property::Scalar do
     definition = { name: :id,
       #binding: Scalar::RunBinding
     }
@@ -443,13 +343,13 @@ puts "+++++++++"
       }.freeze
     }.freeze
 
-    signal, (ctx, _) = Merge::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
+    signal, (ctx, _) = Merge::Property::Scalar.( [a: a, b: {}, merged_a: {}, dfn: definition] )
     ctx[:merged_a].must_equal({:id=>1})
 
-    signal, (ctx, _) = Merge::Scalar.( [a: {}, b: {}, merged_a: {}, dfn: definition] )
+    signal, (ctx, _) = Merge::Property::Scalar.( [a: {}, b: {}, merged_a: {}, dfn: definition] )
     ctx[:merged_a].must_equal({})
 
-    signal, (ctx, _) = Merge::Scalar.( [a: {}, b: {id:3}, merged_a: {}, dfn: definition] )
+    signal, (ctx, _) = Merge::Property::Scalar.( [a: {}, b: {id:3}, merged_a: {}, dfn: definition] )
     ctx[:merged_a].must_equal({:id=>3})
 
 
