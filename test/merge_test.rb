@@ -101,6 +101,57 @@ class MergeTest < Minitest::Spec
        return ctx, old_ctx, signal
     end
 
+  it "what" do
+    a = {
+      a: 1,
+      b: 2,
+      c: {
+        d: 3,
+        e: 4,
+        f: {
+          g: 5,
+          h: 6,
+          bull: "shit",
+        }
+      },
+      rubbish: true,
+    }
+
+    b = {
+      a: 9,
+      c: {
+        d: 10,
+        f: {
+          g: 11,
+          ignore: "this",
+        }
+      }
+    }
+
+    merge = Disposable::Merge::Build.for_block(name: :top) do
+      #merge
+      property :a
+      property :b
+      property :c do
+        #merge (merge all b (d,e,f) into a)
+        property :d
+        property :e
+        property :f do
+          # b wins, a.f will always be overridden by b.f if exists
+          property :g
+          property :h
+        end
+      end
+    end
+
+    ctx, old_ctx = invoke(merge, a, b, merged_a: {})
+    # pp signal, ctx
+    ctx[:merged_a].must_equal({
+      :a=>9, :b=>2, :c=>{:d=>10, :e=>4, :f=>{:g=>11, :h=>6}}
+    })
+
+  end
+
   it "controlled deep merge" do
     a = {
       id: 1,

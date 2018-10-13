@@ -1,5 +1,74 @@
 module Disposable
   module Merge
+    module Build
+      class DSL
+        def initialize(context:)
+          @context     = context
+          @definitions = []
+        end
+
+        def property(name, **, &block)
+          # concrete
+
+          subprocess =
+          if block_given?
+            nested_activity = Build.for_block(name: name, &block)
+
+            containered_activity = MergeTest::Container(nested_activity)
+
+            nested_flow = Module.new do
+              extend Trailblazer::Activity::Railway()
+              module_function
+
+              # we want the same mechanics here for reading from a and b, if/else, etc.
+              # different to scalar: after successfully reading, we go into {process_nested}.
+              # this "container" adds a private/local {merged_a}
+              merge!(Merge::Property::Nested)
+
+              step Subprocess(containered_activity), replace: :process_nested,Output(:failure) => Track(:success) # FIXME: why?
+            end
+
+          else
+            Merge::Property::Scalar.clone
+          end
+
+          @context.step @context.Subprocess(subprocess),
+            input:  Merge::Property.input(name),
+            output: Merge::Property.output(name),
+        @context.Output(:failure)=>@context.Track(:success) # FIXME: why?
+
+          # generic
+
+          return
+          dfn = definition_for(*args, &block)
+
+          @definitions = @definitions + [dfn]
+        end
+
+        def call(&block)
+          instance_exec(&block)
+
+          @context
+        end
+      end
+      module_function
+
+
+      # def for_block(*args, &block)
+      def for_block(name:, **, &block)
+        # concrete
+        activity = Module.new do
+          extend Trailblazer::Activity::Railway(name: name)
+          extend Merge::Property::Step
+        end
+
+        # generic
+        dsl = DSL.new(context: activity)
+        dsl.(&block)
+      end
+    end
+
+
     module Property
       module_function
 
