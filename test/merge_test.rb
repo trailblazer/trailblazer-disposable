@@ -156,6 +156,20 @@ class MergeTest < Minitest::Spec
     end
 
     it "does a beautiful planned merge" do
+      module Planned
+        module Scalar
+          extend Trailblazer::Activity::Railway()
+          module_function
+
+          merge!(Disposable::Merge::Property::Scalar)
+
+          # delete all a-related steps as we only want b.
+          step nil, delete: :read_a_field
+          step nil, delete: :read_b_field_1
+          step nil, delete: "write_b"
+        end
+      end
+
       merge = Disposable::Merge::Build.for_block(name: :top) do
         #merge
         property :a
@@ -183,10 +197,10 @@ class MergeTest < Minitest::Spec
           # 2. merged_a.merge(g: from_b)
           # DISCUSS: what to do if no b present, only a?
 
-          property :f, merge: :bla  do
+          property :f do
             # b wins, a.f will always be overridden by b.f if exists
-            property :g#,  merge: :skip_a
-            property :h#,  merge: :skip_a
+            property :g, scalar: Planned::Scalar
+            property :h, scalar: Planned::Scalar#,  merge: :skip_a
           end
         end
       end
@@ -194,7 +208,7 @@ class MergeTest < Minitest::Spec
       ctx, old_ctx = invoke(merge, a, b, merged_a: {})
       # pp signal, ctx
       ctx[:merged_a].must_equal({
-        :a=>9, :b=>2, :c=>{:d=>10, :e=>4, :f=>{:g=>11, :h=>6}}
+        :a=>9, :b=>2, :c=>{:d=>10, :e=>4, :f=>{:g=>11}}
       })
 
     end

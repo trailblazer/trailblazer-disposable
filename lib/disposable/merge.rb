@@ -7,7 +7,7 @@ module Disposable
           @definitions = []
         end
 
-        def property(name, **, &block)
+        def property(name, scalar: Merge::Property::Scalar, **, &block)
           # concrete
 
           subprocess =
@@ -29,7 +29,7 @@ module Disposable
             end
 
           else
-            Merge::Property::Scalar.clone
+            scalar.clone
           end
 
           @context.step @context.Subprocess(subprocess),
@@ -81,11 +81,8 @@ module Disposable
           puts "@@@@@ #{ctx.object_id} #{name.upcase}/out  "
 
           outer, inner = ctx.decompose
-        # puts "@@@@@ #{original.object_id}... #{mutated.object_id} ??? #{original.inspect}"
-        # o=original.merge(merged_a: mutated[:merged_a])
-          puts "@@@@@ #{outer.object_id} #{name.upcase}/out/ "
 
-          puts inner.inspect
+          puts "@@@@@ #{outer.object_id} #{name.upcase}/out/ "
 
           outer[:merged_a] = inner[:merged_a] # DISCUSS: can we do this by "not" mutating?
           outer
@@ -135,10 +132,10 @@ module Step
         step method(:read_a_field), id: :read_a_field
         fail method(:read_b_field).clone,
           id: :read_b_field_1,
-          Output(:success) => :write_b,
+          Output(:success) => "write_b",
           Output(:failure) => "End.failure"
 
-          step method(:merge_value_into_a), magnetic_to: [], id: :write_b, Output(:success)=>"End.success", Output(:failure)=>"End.failure"
+          step method(:merge_value_into_a), magnetic_to: [], id: "write_b", Output(:success)=>"End.success", Output(:failure)=>"End.failure"
 
         step method(:read_b_field), id: :read_b_field_2
         fail method(:merge_value_into_a).clone, id: :write_a # if no b, we want a
