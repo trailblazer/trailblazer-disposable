@@ -95,7 +95,19 @@ class MergeTest < Minitest::Spec
 
        stack, signal, (ctx, _) = Trailblazer::Activity::Trace.invoke(activity, [ctx, {}])
 
-       output = Trailblazer::Activity::Trace::Present.(stack)
+
+       renderer = ->(level:, input:, name:, **) {
+        ctx = input.data.first
+
+        data = {}
+        # puts "@@@@@ #{ctx[:merged_a].inspect}"
+        data = input.data[1] if ctx[:dfn] && (ctx[:dfn][:name] == :h || ctx[:dfn][:name] == :g)
+
+        [level, %{#{ctx[:dfn]} % #{name} / #{data}}]
+
+      }
+
+       output = Trailblazer::Activity::Trace::Present.(stack, renderer: renderer)
        puts output
 
        return ctx, old_ctx, signal
@@ -167,7 +179,13 @@ class MergeTest < Minitest::Spec
           step nil, delete: :read_a_field
           step nil, delete: :read_b_field_1
           step nil, delete: "write_b"
+          extend Disposable::Merge::Property::Step
+          fail Disposable::Merge::Property::Scalar.method(:merge_value_into_a), replace: :write_a,
+            input: ->(ctx, **) { ctx[:value] = nil; ctx },
+            output: ->(ctx, **) { ctx }
         end
+
+        # pp Scalar.to_h[:circuit]
       end
 
       merge = Disposable::Merge::Build.for_block(name: :top) do
@@ -208,7 +226,7 @@ class MergeTest < Minitest::Spec
       ctx, old_ctx = invoke(merge, a, b, merged_a: {})
       # pp signal, ctx
       ctx[:merged_a].must_equal({
-        :a=>9, :b=>2, :c=>{:d=>10, :e=>4, :f=>{:g=>11}}
+        :a=>9, :b=>2, :c=>{:d=>10, :e=>4, :f=>{:g=>11, h: nil}}
       })
 
     end
