@@ -1,43 +1,66 @@
 module Disposable
   module Merge
     module Build
-      class DSL
-        def initialize(context:)
-          @context     = context
-          @definitions = []
+      # DSLs always happen within blocks.
+      # This DSL block must be "translated" and then executed in some target context.
+
+      module Translator
+        module_function
+
+        # "create"
+        def translate_block(options, &block)
+          activity = Module.new do
+            extend Trailblazer::Activity::Railway(name: name)
+            extend Merge::Property::Step
+          end
         end
 
-        def property(name, scalar: Merge::Property::Scalar, **, &block)
-          # concrete
+        def for_block(nested_activity, context, name, **options)
+          containered_activity = MergeTest::Container(nested_activity)
 
-          subprocess =
-          if block_given?
-            nested_activity = Build.for_block(name: name, &block)
+          nested_flow = Module.new do
+            extend Trailblazer::Activity::Railway()
+            module_function
 
-            containered_activity = MergeTest::Container(nested_activity)
+            # we want the same mechanics here for reading from a and b, if/else, etc.
+            # different to scalar: after successfully reading, we go into {process_nested}.
+            # this "container" adds a private/local {merged_a}
+            merge!(Merge::Property::Nested)
 
-            nested_flow = Module.new do
-              extend Trailblazer::Activity::Railway()
-              module_function
-
-              # we want the same mechanics here for reading from a and b, if/else, etc.
-              # different to scalar: after successfully reading, we go into {process_nested}.
-              # this "container" adds a private/local {merged_a}
-              merge!(Merge::Property::Nested)
-
-              step Subprocess(containered_activity), replace: :process_nested,Output(:failure) => Track(:success) # FIXME: why?
-            end
-
-          else
-            scalar.clone
+            step Subprocess(containered_activity), replace: :process_nested,Output(:failure) => Track(:success) # FIXME: why?
           end
 
-          @context.step @context.Subprocess(subprocess),
+          translate(name, context: context, subprocess: nested_flow)
+        end
+
+        def for_scalar(context, name, scalar: Merge::Property::Scalar.clone, &block)
+          translate(name, {context: context, subprocess: scalar})
+        end
+
+        def translate(name, context:, subprocess:)
+          context.step context.Subprocess(subprocess),
             input:  Merge::Property.input(name),
             output: Merge::Property.output(name),
-        @context.Output(:failure)=>@context.Track(:success) # FIXME: why?
+          context.Output(:failure)=>context.Track(:success) # FIXME: why?
+        end
+      end
 
-          # generic
+      class DSL
+        def initialize(target_context:, translator:)
+          @context    = target_context
+          @translator = translator
+        end
+
+        def property(*args, &block)
+          if block_given?
+
+            nested_activity = Build.for_block(@translator, *args, &block)
+
+            @translator.for_block(nested_activity, @context, *args, &block)
+          else
+            puts "@@@@@ #{args.inspect}"
+            @translator.for_scalar(@context, *args, &block)
+          end
         end
 
         def call(&block)
@@ -50,15 +73,14 @@ module Disposable
 
 
       # def for_block(*args, &block)
-      def for_block(name:, **, &block)
+      def for_block(translator, *args, &block)
         # concrete
-        activity = Module.new do
-          extend Trailblazer::Activity::Railway(name: name)
-          extend Merge::Property::Step
-        end
+        # build the target
+        block_target = translator.translate_block(*args, &block)
 
         # generic
-        dsl = DSL.new(context: activity)
+        # execute the DSL block and translate its instructions to the target
+        dsl = DSL.new(target_context: block_target, translator: translator)
         dsl.(&block)
       end
     end

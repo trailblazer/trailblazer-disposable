@@ -188,7 +188,7 @@ class MergeTest < Minitest::Spec
         # pp Scalar.to_h[:circuit]
       end
 
-      merge = Disposable::Merge::Build.for_block(name: :top) do
+      merge = Disposable::Merge::Build.for_block(Disposable::Merge::Build::Translator, name: :top) do
         #merge
         property :a
         property :b
@@ -217,8 +217,8 @@ class MergeTest < Minitest::Spec
 
           property :f do
             # b wins, a.f will always be overridden by b.f if exists
-            property :g, scalar: Planned::Scalar
-            property :h, scalar: Planned::Scalar#,  merge: :skip_a
+            property :g, scalar: Planned::Scalar.clone
+            property :h, scalar: Planned::Scalar.clone#,  merge: :skip_a
           end
         end
       end
